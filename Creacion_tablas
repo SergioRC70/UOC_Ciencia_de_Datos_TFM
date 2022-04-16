@@ -1,0 +1,44 @@
+--CREATE SEQUENCE datos_diarios_aire_gid_sequence;
+
+--CREATE TABLE datos_diarios_aire
+--(
+--	gid integer NOT NULL DEFAULT nextval('datos_diarios_aire_gid_sequence'::regclass),
+--	estacion integer,
+--	fecha date,
+--	so2 integer,
+--	no2 integer,
+--	pm25 integer,
+--	pm10 integer,
+--	o3 integer,
+--	CONSTRAINT pk_datos_diarios_aire PRIMARY KEY(gid)
+--)
+--WITH 
+--(
+--	OIDS = FALSE
+--);
+
+--ALTER TABLE datos_diarios_aire OWNER TO postgres;
+
+--CREATE SEQUENCE estaciones_aire_gid_sequence;
+
+-- CREATE TABLE estaciones_aire
+-- (
+-- 	gid integer NOT NULL DEFAULT nextval('estaciones_aire_gid_sequence'::regclass),
+-- 	cod_estacion integer,
+-- 	nombre_estacion varchar(100),
+-- 	longitud varchar(50),
+-- 	latitud varchar(50),
+-- 	altitud integer,
+-- 	cod_tipo varchar(5),
+-- 	nom_tipo varchar(50),
+-- 	fecha_alta date,
+-- 	coordenada_x decimal,
+-- 	coordenada_y decimal,
+-- 	CONSTRAINT pk_estaciones_aire PRIMARY KEY(gid)
+-- )
+-- WITH 
+-- (
+-- 	OIDS = FALSE
+-- );
+
+-- ALTER TABLE estaciones_aire OWNER TO postgres;
