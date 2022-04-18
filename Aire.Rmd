@@ -33,30 +33,29 @@ library(ggplot2)
 
 ## Análisis y acondicionado de juego de datos de calidad del aire
 
-### Carga y limpieza del juego de datos diraios de calidad del aire
+### Carga y limpieza del juego de datos horarios de calidad del aire
 
-Cargamos en primer lugar el conjunto de datos diarios de calidad del aire y vemos su estructura.
+Cargamos en primer lugar el conjunto de datos horarios de calidad del aire y vemos su estructura.
 
 ```{r message= FALSE, warning=FALSE}
 
-mydir = "Datos diarios"
-myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE)
-datos_diarios_aire <- lapply(myFiles, read_csv2) %>% bind_rows()
-str(datos_diarios_aire)
+mydir = "Datos horarios"
+myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE, recursive = TRUE)
+datos_horarios_aire <- myFiles %>% map_df(~read_csv2(.x) %>% mutate(MES = as.character(MES)))
 
 ```
 
 Cada registro está estructurado de la siguiente forma:
 
-PROVINCIA, MUNICIPIO, ESTACION, MAGNITUD, PUNTO_MUESTREO, ANO, MES, D01, V01, D02, V02...
+PROVINCIA, MUNICIPIO, ESTACION, MAGNITUD, PUNTO_MUESTREO, ANO, MES, H01, V01, H02, V02... H24, V24
 
-Donde D01 corresponde al dato del primer día del mes, D02 al del segundo día y así sucesivamente.
+Donde H01 corresponde al dato de la primera hora, H02 la segunda y así sucesivamente.
 
 Vamos a ver ahora los distintos valores para la columna MAGNITUD. Estos valores nos identifican los distintos datos que se miden en cada una de las estaciones:
 
 ```{r message= FALSE, warning=FALSE}
 
-distinct(datos_diarios_aire, MAGNITUD)
+distinct(datos_horarios_aire, MAGNITUD)
 
 ```
 
@@ -94,359 +93,6 @@ Las columnas Vx identifican los valores que han sido validados. Vamos a limpiar 
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_diarios_aire$D01 <- ifelse(datos_diarios_aire$V01 == "N", NA, datos_diarios_aire$D01)
-datos_diarios_aire$D02 <- ifelse(datos_diarios_aire$V02 == "N", NA, datos_diarios_aire$D02)
-datos_diarios_aire$D03 <- ifelse(datos_diarios_aire$V03 == "N", NA, datos_diarios_aire$D03)
-datos_diarios_aire$D04 <- ifelse(datos_diarios_aire$V04 == "N", NA, datos_diarios_aire$D04)
-datos_diarios_aire$D05 <- ifelse(datos_diarios_aire$V05 == "N", NA, datos_diarios_aire$D05)
-datos_diarios_aire$D06 <- ifelse(datos_diarios_aire$V06 == "N", NA, datos_diarios_aire$D06)
-datos_diarios_aire$D07 <- ifelse(datos_diarios_aire$V07 == "N", NA, datos_diarios_aire$D07)
-datos_diarios_aire$D08 <- ifelse(datos_diarios_aire$V08 == "N", NA, datos_diarios_aire$D08)
-datos_diarios_aire$D09 <- ifelse(datos_diarios_aire$V09 == "N", NA, datos_diarios_aire$D09)
-datos_diarios_aire$D10 <- ifelse(datos_diarios_aire$V10 == "N", NA, datos_diarios_aire$D10)
-datos_diarios_aire$D11 <- ifelse(datos_diarios_aire$V11 == "N", NA, datos_diarios_aire$D11)
-datos_diarios_aire$D12 <- ifelse(datos_diarios_aire$V12 == "N", NA, datos_diarios_aire$D12)
-datos_diarios_aire$D13 <- ifelse(datos_diarios_aire$V13 == "N", NA, datos_diarios_aire$D13)
-datos_diarios_aire$D14 <- ifelse(datos_diarios_aire$V14 == "N", NA, datos_diarios_aire$D14)
-datos_diarios_aire$D15 <- ifelse(datos_diarios_aire$V15 == "N", NA, datos_diarios_aire$D15)
-datos_diarios_aire$D16 <- ifelse(datos_diarios_aire$V16 == "N", NA, datos_diarios_aire$D16)
-datos_diarios_aire$D17 <- ifelse(datos_diarios_aire$V17 == "N", NA, datos_diarios_aire$D17)
-datos_diarios_aire$D18 <- ifelse(datos_diarios_aire$V18 == "N", NA, datos_diarios_aire$D18)
-datos_diarios_aire$D19 <- ifelse(datos_diarios_aire$V19 == "N", NA, datos_diarios_aire$D19)
-datos_diarios_aire$D20 <- ifelse(datos_diarios_aire$V20 == "N", NA, datos_diarios_aire$D20)
-datos_diarios_aire$D21 <- ifelse(datos_diarios_aire$V21 == "N", NA, datos_diarios_aire$D21)
-datos_diarios_aire$D22 <- ifelse(datos_diarios_aire$V22 == "N", NA, datos_diarios_aire$D22)
-datos_diarios_aire$D23 <- ifelse(datos_diarios_aire$V23 == "N", NA, datos_diarios_aire$D23)
-datos_diarios_aire$D24 <- ifelse(datos_diarios_aire$V24 == "N", NA, datos_diarios_aire$D24)
-datos_diarios_aire$D25 <- ifelse(datos_diarios_aire$V25 == "N", NA, datos_diarios_aire$D25)
-datos_diarios_aire$D26 <- ifelse(datos_diarios_aire$V26 == "N", NA, datos_diarios_aire$D26)
-datos_diarios_aire$D27 <- ifelse(datos_diarios_aire$V27 == "N", NA, datos_diarios_aire$D27)
-datos_diarios_aire$D28 <- ifelse(datos_diarios_aire$V28 == "N", NA, datos_diarios_aire$D28)
-datos_diarios_aire$D29 <- ifelse(datos_diarios_aire$V29 == "N", NA, datos_diarios_aire$D29)
-datos_diarios_aire$D30 <- ifelse(datos_diarios_aire$V30 == "N", NA, datos_diarios_aire$D30)
-datos_diarios_aire$D31 <- ifelse(datos_diarios_aire$V31 == "N", NA, datos_diarios_aire$D31)
-
-
-```
-
-
-Vamos a eliminar algunas de las columnas que no nos aportan información:
-
-- Las columnas Vx
-
-- Las columnas PROVINCIA, MUNICIPIO y PUNTO_MUESTREO no aportan información ya que se trata para todos los casos de estaciones de Madrid y el punto de muestreo es una combinación de los valores de provincia, municipio y estación.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_diarios_aire <- datos_diarios_aire[, -grep("^V", colnames(datos_diarios_aire))]
-datos_diarios_aire <- subset(datos_diarios_aire, select = -c(PROVINCIA, MUNICIPIO, PUNTO_MUESTREO))
-
-```
-
-A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que los días pasaran a ser filas (cada fila corresponderá a un día).
-
-```{r message= FALSE, warning=FALSE}
-
-datos_diarios_aire <- datos_diarios_aire %>%
-  gather("DIA", "VALOR", D01:D31) %>%
-  spread(key = MAGNITUD, value = "VALOR")
-
-```
-
-Vamos a quedarnos con un pequeño grupo de contaminantes. Este grupo se ha escogido en base al índice de calidad del aire (ICA) creado por la Agencia Europea de Medio Ambiente (AEMA). El ICA se basa en cinco contaminantes clave que son perjudiciales para la salud de las personas y el medioambiente: partículas en suspensión (PM2,5 y PM10), ozono troposférico (O3), dióxido de nitrógeno (NO2) y dióxido de azufre (SO2). Los detalles sobre el ICA se pueden encontrar en la página web de la AEMA (https://www.eea.europa.eu/es/highlights/indice-europeo-de-calidad-del).
-
-
-```{r message= FALSE, warning=FALSE}
-
-#datos_diarios_aire$FECHA <- as.Date(with(datos_diarios_aire, paste(ANO, MES, substring(DIA, 2), sep="-")), "%Y-%m-%d")
-#datos_diarios_aire <- datos_diarios_aire[,c(1, 5, 8:10, 12, 19)]
-datos_diarios_aire <- datos_diarios_aire[,c(1:5, 8:10, 12)]
-
-```
-
-Por último, cambiamos el nombre de las columnas para poner un nombre significativo, convertimos las columnas con los valores de los contaminantes a tipo numeric y factorizamos las columnas de año y estación.
-
-```{r message= FALSE, warning=FALSE}
-
-colnames(datos_diarios_aire) <- c("ESTACION", "ANO", "MES", "DIA", "SO2", "NO2", "PM25", "PM10", "O3")
-
-datos_diarios_aire$SO2 <- as.numeric(datos_diarios_aire$SO2)
-datos_diarios_aire$NO2 <- as.numeric(datos_diarios_aire$NO2)
-datos_diarios_aire$PM25 <- as.numeric(datos_diarios_aire$PM25)
-datos_diarios_aire$PM10 <- as.numeric(datos_diarios_aire$PM10)
-datos_diarios_aire$O3 <- as.numeric(datos_diarios_aire$O3)
-
-#datos_diarios_aire$ANO <- as.factor(datos_diarios_aire$ANO)
-#datos_diarios_aire$ESTACION <- as.factor(datos_diarios_aire$ESTACION)
-
-summary(datos_diarios_aire)
-
-```
-
-
-### Carga de juego de datos con información de estaciones
-
-Cargamos el conjunto de datos con informaciones de las estaciones de control y vemos su estructura.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_estaciones_aire <- read_csv2("Estaciones/informacion_estaciones_red_calidad_aire.csv")
-str(datos_estaciones_aire)
-
-```
-
-Vamos a obviar la información geográfica para el análisis en R y vamos a quedarnos únicamente con el nombre y el tipo de estación.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO")]
-
-```
-
-Añadimos esta información al conjunto de datos diarios de calidad del aire.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_diarios_aire <- merge(x = datos_diarios_aire, y = datos_estaciones_aire, by.x = "ESTACION", by.y = "CODIGO_CORTO", all = TRUE)
-colnames(datos_diarios_aire)[10] <- "NOM_ESTACION"
-
-```
-
-### Análisis de datos de calidad del aire
-
-Outliers
-
-```{r message= FALSE, warning=FALSE}
-
-ggplot(datos_diarios_aire, aes(y = SO2)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  SO2") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(y = NO2)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(y = PM10)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(y = PM25)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(y = O3)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-```
-
-Evolución anual
-
-```{r message= FALSE, warning=FALSE}
-
-require(plyr)
-
-DF = ddply(datos_diarios_aire, c("ANO"), summarize, SO2.mean = mean(SO2, na.rm = T))
-
-ggplot(DF, aes(x = ANO, y = SO2.mean)) +
-  geom_line(size = 1, color="blue") 
-#  stat_smooth(color = "red", fill = "red", method = "loess" ) 
-#  theme_bw() + 
-#  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-#  labs(x = "Año", y = bquote(μg / m^3))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-ggplot(datos_diarios_aire, aes(x = ANO, y = SO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="blue", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'SO2'), color = 'black') +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Año", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ANO, y = NO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="red", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$NO2, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'NO2'), color = 'black') +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Año", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ANO, y = PM10)) +
-  geom_boxplot(width = 0.4, color="black", fill="orange", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM10, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'PM10'), color = 'black') +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Año", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ANO, y = PM25)) +
-  geom_boxplot(width = 0.4, color="black", fill="green", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM25, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'PM25'), color = 'black') +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Año", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ANO, y = O3)) +
-  geom_boxplot(width = 0.4, color="black", fill="gray", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$O3, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'O3'), color = 'black') +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Año", y = bquote(μg / m^3))
-
-```
-
-Distribución por estaciones
-
-```{r message= FALSE, warning=FALSE}
-
-ggplot(datos_diarios_aire, aes(x = ESTACION, y = SO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="blue", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ESTACION, y = NO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="red", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$NO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ESTACION, y = PM10)) +
-  geom_boxplot(width = 0.4, color="black", fill="orange", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM10, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ESTACION, y = PM25)) +
-  geom_boxplot(width = 0.4, color="black", fill="green", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM25, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = ESTACION, y = O3)) +
-  geom_boxplot(width = 0.4, color="black", fill="gray", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$O3, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-```
-
-Distribución por tipo de estación
-
-```{r message= FALSE, warning=FALSE}
-
-ggplot(datos_diarios_aire, aes(x = NOM_TIPO, y = SO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="blue", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = NOM_TIPO, y = NO2)) +
-  geom_boxplot(width = 0.4, color="black", fill="red", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$NO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = NOM_TIPO, y = PM10)) +
-  geom_boxplot(width = 0.4, color="black", fill="orange", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM10, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = NOM_TIPO, y = PM25)) +
-  geom_boxplot(width = 0.4, color="black", fill="green", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$PM25, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-ggplot(datos_diarios_aire, aes(x = NOM_TIPO, y = O3)) +
-  geom_boxplot(width = 0.4, color="black", fill="gray", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_diarios_aire$O3, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-```
-
-
-
-
-
-
-
-
-```{r message= FALSE, warning=FALSE}
-
-write_csv(datos_diarios_aire, path = "datos_diarios_aire.csv", append = FALSE, col_names = TRUE, na = '')
-
-```
-
-
-
-
-
-
-
-
-
-
-Cargamos en primer lugar el conjunto de datos horarios de calidad del aire y vemos su estructura.
-
-```{r message= FALSE, warning=FALSE}
-
-mydir = "Datos horarios"
-myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE, recursive = TRUE)
-datos_horarios_aire <- myFiles %>% map_df(~read_csv2(.x) %>% mutate(MES = as.character(MES)))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
 datos_horarios_aire$H01 <- ifelse(datos_horarios_aire$V01 == "N", NA, datos_horarios_aire$H01)
 datos_horarios_aire$H02 <- ifelse(datos_horarios_aire$V02 == "N", NA, datos_horarios_aire$H02)
 datos_horarios_aire$H03 <- ifelse(datos_horarios_aire$V03 == "N", NA, datos_horarios_aire$H03)
@@ -474,11 +120,22 @@ datos_horarios_aire$H24 <- ifelse(datos_horarios_aire$V24 == "N", NA, datos_hora
 
 ```
 
+Vamos a eliminar algunas de las columnas que no nos aportan información:
+
+- Las columnas Vx
+
+- Las columnas PROVINCIA, MUNICIPIO y PUNTO_MUESTREO no aportan información ya que se trata para todos los casos de estaciones de Madrid y el punto de muestreo es una combinación de los valores de provincia, municipio y estación.
 
 ```{r message= FALSE, warning=FALSE}
 
 datos_horarios_aire <- datos_horarios_aire[, -grep("^V", colnames(datos_horarios_aire))]
 datos_horarios_aire <- subset(datos_horarios_aire, select = -c(PROVINCIA, MUNICIPIO, PUNTO_MUESTREO))
+
+```
+
+A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que los días pasaran a ser filas (cada fila corresponderá a un día).
+
+```{r message= FALSE, warning=FALSE}
 
 datos_horarios_aire <- datos_horarios_aire %>%
   gather("HORA", "VALOR", H01:H24) %>%
@@ -486,15 +143,20 @@ datos_horarios_aire <- datos_horarios_aire %>%
 
 ```
 
+Vamos a quedarnos con un pequeño grupo de contaminantes. Este grupo se ha escogido en base al índice de calidad del aire (ICA) creado por la Agencia Europea de Medio Ambiente (AEMA). El ICA se basa en cinco contaminantes clave que son perjudiciales para la salud de las personas y el medioambiente: partículas en suspensión (PM2,5 y PM10), ozono troposférico (O3), dióxido de nitrógeno (NO2) y dióxido de azufre (SO2). Los detalles sobre el ICA se pueden encontrar en la página web de la AEMA (https://www.eea.europa.eu/es/highlights/indice-europeo-de-calidad-del).
+
 ```{r message= FALSE, warning=FALSE}
 
 #datos_horarios_aire$FECHA <- make_datetime(as.integer(datos_horarios_aire$ANO), as.integer(datos_horarios_aire$MES), as.integer(substring(datos_horarios_aire$DIA, 2)), as.integer(substring(datos_horarios_aire$HORA, 2)))
 datos_horarios_aire <- datos_horarios_aire[,c(1:6, 9:11, 13)]
-colnames(datos_horarios_aire) <- c("ESTACION", "ANO", "MES", "DIA", "HORA", "SO2", "NO2", "PM25", "PM10", "O3")
 
 ```
 
+Por último, cambiamos el nombre de las columnas para poner un nombre significativo, convertimos las columnas con los valores de los contaminantes a tipo numeric.
+
 ```{r message= FALSE, warning=FALSE}
+
+colnames(datos_horarios_aire) <- c("ESTACION", "ANO", "MES", "DIA", "HORA", "SO2", "NO2", "PM25", "PM10", "O3")
 
 datos_horarios_aire$SO2 <- as.numeric(datos_horarios_aire$SO2)
 datos_horarios_aire$NO2 <- as.numeric(datos_horarios_aire$NO2)
@@ -508,11 +170,12 @@ datos_horarios_aire$O3 <- as.numeric(datos_horarios_aire$O3)
 #datos_horarios_aire$HORA <- as.factor(datos_horarios_aire$HORA)
 #datos_horarios_aire$ESTACION <- as.factor(datos_horarios_aire$ESTACION)
 
-summary(datos_horarios_aire)
-
 ```
 
+
 ```{r message= FALSE, warning=FALSE}
+
+summary(datos_horarios_aire)
 
 head(datos_horarios_aire)
 
@@ -524,16 +187,17 @@ Cargamos el conjunto de datos con informaciones de las estaciones de control y v
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_estaciones_aire <- read_csv2("Estaciones/informacion_estaciones_red_calidad_aire.csv")
+datos_estaciones_aire <- read_delim("Estaciones/informacion_estaciones_red_calidad_aire.csv", delim = ";")
 str(datos_estaciones_aire)
 
 ```
 
-Vamos a obviar la información geográfica para el análisis en R y vamos a quedarnos únicamente con el nombre y el tipo de estación.
+Únicamente vamos a utilizar los datos de código de estación, nombre de la estación, tipo de estación y datos geométricos.
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO")]
+#datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO", "COORDENADA_X_ETRS89", "COORDENADA_Y_ETRS89")]
+datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO", "LONGITUD", "LATITUD")]
 
 ```
 
@@ -545,6 +209,20 @@ datos_horarios_aire <- merge(x = datos_horarios_aire, y = datos_estaciones_aire,
 colnames(datos_horarios_aire)[11] <- "NOM_ESTACION"
 
 ```
+
+
+```{r message= FALSE, warning=FALSE}
+
+write_csv(datos_horarios_aire, path = "datos_horarios_aire.csv", append = FALSE, col_names = TRUE, na = '')
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+write_csv(datos_horarios_aire[datos_horarios_aire$ANO == '2019', ], path = "datos_horarios_aire_2019.csv", append = FALSE, col_names = TRUE, na = '')
+
+```
+
 
 ### Análisis de datos de calidad del aire
 
