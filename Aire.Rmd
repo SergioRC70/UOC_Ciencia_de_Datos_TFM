@@ -28,12 +28,13 @@ library(tidyr)
 library(tidyverse)
 library(lubridate)
 library(ggplot2)
+library(plyr)
+library(cowplot)
+library(ggpubr)
 
 ```
 
-## Análisis y acondicionado de juego de datos de calidad del aire
-
-### Carga y limpieza del juego de datos horarios de calidad del aire
+## Carga y limpieza del juego de datos horarios de calidad del aire
 
 Cargamos en primer lugar el conjunto de datos horarios de calidad del aire y vemos su estructura.
 
@@ -41,7 +42,8 @@ Cargamos en primer lugar el conjunto de datos horarios de calidad del aire y vem
 
 mydir = "Datos horarios"
 myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE, recursive = TRUE)
-datos_horarios_aire <- myFiles %>% map_df(~read_csv2(.x) %>% mutate(MES = as.character(MES)))
+datos_horarios_aire <- myFiles %>% map_df(~read_csv2(.x, show_col_types = FALSE) %>% mutate(MES = as.character(MES))) 
+str(datos_horarios_aire)
 
 ```
 
@@ -133,7 +135,7 @@ datos_horarios_aire <- subset(datos_horarios_aire, select = -c(PROVINCIA, MUNICI
 
 ```
 
-A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que los días pasaran a ser filas (cada fila corresponderá a un día).
+A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que las horas pasaran a ser filas (cada fila corresponderá a una hora).
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -147,12 +149,11 @@ Vamos a quedarnos con un pequeño grupo de contaminantes. Este grupo se ha escog
 
 ```{r message= FALSE, warning=FALSE}
 
-#datos_horarios_aire$FECHA <- make_datetime(as.integer(datos_horarios_aire$ANO), as.integer(datos_horarios_aire$MES), as.integer(substring(datos_horarios_aire$DIA, 2)), as.integer(substring(datos_horarios_aire$HORA, 2)))
 datos_horarios_aire <- datos_horarios_aire[,c(1:6, 9:11, 13)]
 
 ```
 
-Por último, cambiamos el nombre de las columnas para poner un nombre significativo, convertimos las columnas con los valores de los contaminantes a tipo numeric.
+Por último, cambiamos el nombre de las columnas para poner un nombre significativo, convertimos las columnas con los valores de los contaminantes a tipo numeric y añadimos un campo con la fecha que utilizaremos en QGIS.
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -164,14 +165,12 @@ datos_horarios_aire$PM25 <- as.numeric(datos_horarios_aire$PM25)
 datos_horarios_aire$PM10 <- as.numeric(datos_horarios_aire$PM10)
 datos_horarios_aire$O3 <- as.numeric(datos_horarios_aire$O3)
 
-#datos_horarios_aire$ANO <- as.factor(datos_horarios_aire$ANO)
-#datos_horarios_aire$MES <- as.factor(datos_horarios_aire$MES)
-#datos_horarios_aire$DIA <- as.factor(datos_horarios_aire$DIA)
-#datos_horarios_aire$HORA <- as.factor(datos_horarios_aire$HORA)
-#datos_horarios_aire$ESTACION <- as.factor(datos_horarios_aire$ESTACION)
+datos_horarios_aire$FECHA <- make_datetime(as.integer(datos_horarios_aire$ANO), as.integer(datos_horarios_aire$MES), as.integer(datos_horarios_aire$DIA), as.integer(substring(datos_horarios_aire$HORA, 2)))
+
 
 ```
 
+Mostramos información del dataset resultante.
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -181,23 +180,22 @@ head(datos_horarios_aire)
 
 ```
 
-### Carga de juego de datos con información de estaciones
+## Carga de juego de datos con información de estaciones
 
 Cargamos el conjunto de datos con informaciones de las estaciones de control y vemos su estructura.
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_estaciones_aire <- read_delim("Estaciones/informacion_estaciones_red_calidad_aire.csv", delim = ";")
+datos_estaciones_aire <- read_delim("Estaciones/informacion_estaciones_red_calidad_aire.csv", delim = ";", show_col_types = FALSE)
 str(datos_estaciones_aire)
 
 ```
 
-Únicamente vamos a utilizar los datos de código de estación, nombre de la estación, tipo de estación y datos geométricos.
+Únicamente vamos a utilizar los datos de código de estación, nombre de la estación y tipo de estación.
 
 ```{r message= FALSE, warning=FALSE}
 
-#datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO", "COORDENADA_X_ETRS89", "COORDENADA_Y_ETRS89")]
-datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO", "LONGITUD", "LATITUD")]
+datos_estaciones_aire <- datos_estaciones_aire[,c("CODIGO_CORTO", "ESTACION", "NOM_TIPO")]
 
 ```
 
@@ -206,10 +204,11 @@ Añadimos esta información al conjunto de datos horarios de calidad del aire.
 ```{r message= FALSE, warning=FALSE}
 
 datos_horarios_aire <- merge(x = datos_horarios_aire, y = datos_estaciones_aire, by.x = "ESTACION", by.y = "CODIGO_CORTO", all = TRUE)
-colnames(datos_horarios_aire)[11] <- "NOM_ESTACION"
+colnames(datos_horarios_aire)[12] <- "NOM_ESTACION"
 
 ```
 
+Vamos a guardar nuestro dataset en un fichero csv que utilizaremos para cargar estos datos en una base de datos PostGIS.
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -217,16 +216,11 @@ write_csv(datos_horarios_aire, path = "datos_horarios_aire.csv", append = FALSE,
 
 ```
 
-```{r message= FALSE, warning=FALSE}
+## Análisis de datos de calidad del aire
 
-write_csv(datos_horarios_aire[datos_horarios_aire$ANO == '2019', ], path = "datos_horarios_aire_2019.csv", append = FALSE, col_names = TRUE, na = '')
+### Outliers
 
-```
-
-
-### Análisis de datos de calidad del aire
-
-Outliers
+Buscamos en primer lugar outliers entre los datos
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -267,12 +261,13 @@ ggplot(datos_horarios_aire, aes(y = O3)) +
 
 ```
 
-Evolución anual
+En todos los contaminantes se encuentran valores muy superiores a los valores medios. Se han comprobado los valores más extremos y en todos los casos aparecen como validados, por lo tanto, se darán como valores correctos.
 
-["#fd7f6f", "#7eb0d5", "#b2e061", "#bd7ebe", "#ffb55a", "#ffee65", "#beb9db", "#fdcce5", "#8bd3c7"]
+A continuación se van a generar una serie de gráficas para el análisis de los distintos contaminantes así como el análisis de la creación de Madrid Central y el periodo de confinamiento de 2020. Las reflexiones sobre este análisis se mostraran en la memoria del TFM
 
 ```{r message= FALSE, warning=FALSE}
 
+# Para el resto de gráficas vamos asociar un color a cada uno de los contaminantes.
 colores <- c("#fd7f6f", "#7eb0d5", "#b2e061", "#bd7ebe", "#ffb55a")
 names(colores) <- c("SO2", "NO2", "PM10", "PM25", "O3")
 
@@ -280,263 +275,611 @@ names(colores) <- c("SO2", "NO2", "PM10", "PM25", "O3")
 
 ```{r message= FALSE, warning=FALSE}
 
-DF <- ddply(datos_horarios_aire, c("ANO"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+df_anual <- ddply(datos_horarios_aire, c("ANO"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
 
-p1 <- ggplot(DF, aes(x = ANO, y = SO2.mean)) +
+```
+
+### Análisis SO2
+
+```{r message= FALSE, warning=FALSE}
+
+p1 <- ggplot(df_anual, aes(x = ANO, y = SO2.mean)) +
   geom_line(size = 0.5, color = colores["SO2"]) +
+  ggtitle("Evolución anual") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+datos_horarios_aire_SO2 <- datos_horarios_aire[!is.na(datos_horarios_aire$SO2), ]
+
+p2 <- ggplot(datos_horarios_aire_SO2, aes(x = as.factor(ESTACION), y = SO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
+  ggtitle("Estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_SO2$SO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+p3 <- ggplot(datos_horarios_aire_SO2, aes(x = as.factor(NOM_TIPO), y = SO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
+  ggtitle("Tipo de estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_SO2$SO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+p4 <- ggplot(datos_horarios_aire_SO2, aes(x = as.factor(MES), y = SO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
+  ggtitle("Mes") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_SO2$SO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+p5 <- ggplot(datos_horarios_aire_SO2, aes(x = as.factor(substr(HORA, 2, 3)), y = SO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
+  ggtitle("Hora") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_SO2$SO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+plot_so2 <- ggarrange(p1,
+          ggarrange(p2, p3, ncol = 2),
+          ggarrange(p4, p5, ncol = 2),
+          nrow = 3
+          ) 
+
+save_plot("01_SO2.png", plot_so2, base_width = 8, base_height = 8)
+
+plot_so2
+
+```
+
+### Análisis NO2
+
+```{r message= FALSE, warning=FALSE}
+
+p1 <- ggplot(df_anual, aes(x = ANO, y = NO2.mean)) +
+  geom_line(size = 0.5, color = colores["NO2"]) +
+  ggtitle("Evolución anual") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+datos_horarios_aire_NO2 <- datos_horarios_aire[!is.na(datos_horarios_aire$NO2), ]
+
+p2 <- ggplot(datos_horarios_aire_NO2, aes(x = as.factor(ESTACION), y = NO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
+  ggtitle("Estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_NO2$NO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p3 <- ggplot(datos_horarios_aire_NO2, aes(x = as.factor(NOM_TIPO), y = NO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
+  ggtitle("Tipo de estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_NO2$NO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p4 <- ggplot(datos_horarios_aire_NO2, aes(x = as.factor(MES), y = NO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
+  ggtitle("Mes") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_NO2$NO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p5 <- ggplot(datos_horarios_aire_NO2, aes(x = as.factor(substr(HORA, 2, 3)), y = NO2)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
+  ggtitle("Hora") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_NO2$NO2, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+plot_no2 <- ggarrange(p1,
+          ggarrange(p2, p3, ncol = 2),
+          ggarrange(p4, p5, ncol = 2),
+          nrow = 3
+          ) 
+
+save_plot("01_NO2.png", plot_no2, base_width = 8, base_height = 8)
+
+plot_no2
+
+```
+
+### Análisis PM25
+
+```{r message= FALSE, warning=FALSE}
+
+p1 <- ggplot(df_anual, aes(x = ANO, y = PM25.mean)) +
+  geom_line(size = 0.5, color = colores["PM25"]) +
+  ggtitle("Evolución anual") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+datos_horarios_aire_PM25 <- datos_horarios_aire[!is.na(datos_horarios_aire$PM25), ]
+
+p2 <- ggplot(datos_horarios_aire_PM25, aes(x = as.factor(ESTACION), y = PM25)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
+  ggtitle("Estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM25$PM25, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p3 <- ggplot(datos_horarios_aire_PM25, aes(x = as.factor(NOM_TIPO), y = PM25)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
+  ggtitle("Tipo de estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM25$PM25, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p4 <- ggplot(datos_horarios_aire_PM25, aes(x = as.factor(MES), y = PM25)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
+  ggtitle("Mes") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM25$PM25, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p5 <- ggplot(datos_horarios_aire_PM25, aes(x = as.factor(substr(HORA, 2, 3)), y = PM25)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
+  ggtitle("Hora") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM25$PM25, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+plot_pm25 <- ggarrange(p1,
+          ggarrange(p2, p3, ncol = 2),
+          ggarrange(p4, p5, ncol = 2),
+          nrow = 3
+          ) 
+
+save_plot("01_PM25.png", plot_pm25, base_width = 8, base_height = 8)
+
+plot_pm25
+
+```
+
+### Análisis PM10
+
+```{r message= FALSE, warning=FALSE}
+
+p1 <- ggplot(df_anual, aes(x = ANO, y = PM10.mean)) +
+  geom_line(size = 0.5, color = colores["PM10"]) +
+  ggtitle("Evolución anual") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+datos_horarios_aire_PM10 <- datos_horarios_aire[!is.na(datos_horarios_aire$PM10), ]
+
+p2 <- ggplot(datos_horarios_aire_PM10, aes(x = as.factor(ESTACION), y = PM10)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
+  ggtitle("Estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM10$PM10, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p3 <- ggplot(datos_horarios_aire_PM10, aes(x = as.factor(NOM_TIPO), y = PM10)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
+  ggtitle("Tipo de estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM10$PM10, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p4 <- ggplot(datos_horarios_aire_PM10, aes(x = as.factor(MES), y = PM10)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
+  ggtitle("Mes") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM10$PM10, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p5 <- ggplot(datos_horarios_aire_PM10, aes(x = as.factor(substr(HORA, 2, 3)), y = PM25)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
+  ggtitle("Hora") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_PM10$PM10, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+plot_pm10 <- ggarrange(p1,
+          ggarrange(p2, p3, ncol = 2),
+          ggarrange(p4, p5, ncol = 2),
+          nrow = 3
+          ) 
+
+save_plot("01_PM10.png", plot_pm10, base_width = 8, base_height = 8)
+
+plot_pm10
+
+```
+
+### Análisis O3
+
+```{r message= FALSE, warning=FALSE}
+
+p1 <- ggplot(df_anual, aes(x = ANO, y = O3.mean)) +
+  geom_line(size = 0.5, color = colores["O3"]) +
+  ggtitle("Evolución anual") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(), y = bquote(μg / m^3))
+
+datos_horarios_aire_O3 <- datos_horarios_aire[!is.na(datos_horarios_aire$O3), ]
+
+p2 <- ggplot(datos_horarios_aire_O3, aes(x = as.factor(ESTACION), y = O3)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
+  ggtitle("Estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_O3$O3, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p3 <- ggplot(datos_horarios_aire_O3, aes(x = as.factor(NOM_TIPO), y = O3)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
+  ggtitle("Tipo de estación") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_O3$O3, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p4 <- ggplot(datos_horarios_aire_O3, aes(x = as.factor(MES), y = O3)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
+  ggtitle("Mes") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_O3$O3, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p5 <- ggplot(datos_horarios_aire_O3, aes(x = as.factor(substr(HORA, 2, 3)), y = O3)) +
+  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
+  ggtitle("Hora") +
+  scale_y_continuous(limits = quantile(datos_horarios_aire_O3$O3, c(0.1, 0.9), na.rm = TRUE)) +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+plot_o3 <- ggarrange(p1,
+          ggarrange(p2, p3, ncol = 2),
+          ggarrange(p4, p5, ncol = 2),
+          nrow = 3
+          ) 
+
+save_plot("01_O3.png", plot_o3, base_width = 8, base_height = 8)
+
+plot_o3
+
+```
+
+### Análisis Confinamiento
+
+```{r message= FALSE, warning=FALSE}
+
+df_confinamiento <- datos_horarios_aire %>% 
+  filter(FECHA > '2020-01-01' & FECHA < '2020-05-25') %>% 
+  ddply(c("ANO", "MES", "DIA"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+
+df_confinamiento$FECHA <- ISOdate(as.integer(df_confinamiento$ANO), as.integer(df_confinamiento$MES), as.integer(df_confinamiento$DIA))
+
+datos_horarios_aire_antes_lockdown <- df_confinamiento %>% 
+  filter(FECHA <= '2020-03-14')
+datos_horarios_aire_lockdown <- df_confinamiento %>% 
+  filter(FECHA > '2020-03-14')
+
+mean_so2_antes_lockdown <- mean(datos_horarios_aire_antes_lockdown$SO2, na.rm=TRUE)
+mean_so2_lockdown <- mean(datos_horarios_aire_lockdown$SO2.mean, na.rm=TRUE)
+mean_no2_antes_lockdown <- mean(datos_horarios_aire_antes_lockdown$NO2, na.rm=TRUE)
+mean_no2_lockdown <- mean(datos_horarios_aire_lockdown$NO2.mean, na.rm=TRUE)
+mean_pm25_antes_lockdown <- mean(datos_horarios_aire_antes_lockdown$PM25, na.rm=TRUE)
+mean_pm25_lockdown <- mean(datos_horarios_aire_lockdown$PM25.mean, na.rm=TRUE)
+mean_pm10_antes_lockdown <- mean(datos_horarios_aire_antes_lockdown$PM10, na.rm=TRUE)
+mean_pm10_lockdown <- mean(datos_horarios_aire_lockdown$PM10.mean, na.rm=TRUE)
+mean_o3_antes_lockdown <- mean(datos_horarios_aire_antes_lockdown$O3, na.rm=TRUE)
+mean_o3_lockdown <- mean(datos_horarios_aire_lockdown$O3.mean, na.rm=TRUE)
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+p1c <- ggplot(df_confinamiento, aes(x = FECHA, y = SO2.mean, group = 1)) +
+  geom_line(color = colores["SO2"]) +
+  geom_segment(aes(x = ISOdate("2020", "01", "01"), xend = ISOdate("2020", "03", "14"), y = mean_so2_antes_lockdown, yend = mean_so2_antes_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "02", "01"), mean_so2_antes_lockdown, label = 'valor medio antes de confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_segment(aes(x = ISOdate("2020", "03", "14"), xend = ISOdate("2020", "05", "25"), y = mean_so2_lockdown, yend = mean_so2_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "04", "15"), mean_so2_lockdown, label = 'valor medio durante el confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_vline(xintercept = ISOdate("2020", "03", "14"), linetype = 'solid', colour='red') +
   ggtitle("  SO2") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
   labs(y = bquote(μg / m^3))
 
-p2 <- ggplot(DF, aes(x = ANO, y = NO2.mean)) +
-  geom_line(size = 0.5, color =  colores["NO2"]) +
+p2c <- ggplot(df_confinamiento, aes(x = FECHA, y = NO2.mean, group = 1)) +
+  geom_line(color = colores["NO2"]) +
+  geom_segment(aes(x = ISOdate("2020", "01", "01"), xend = ISOdate("2020", "03", "14"), y = mean_no2_antes_lockdown, yend = mean_no2_antes_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "02", "01"), mean_no2_antes_lockdown, label = 'valor medio antes de confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_segment(aes(x = ISOdate("2020", "03", "14"), xend = ISOdate("2020", "05", "25"), y = mean_no2_lockdown, yend = mean_no2_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "04", "15"), mean_no2_lockdown, label = 'valor medio durante el confinamiento', vjust = -2, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_vline(xintercept = ISOdate("2020", "03", "14"), linetype = 'solid', colour='red') +
   ggtitle("  NO2") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
   labs(y = bquote(μg / m^3))
 
-p3 <- ggplot(DF, aes(x = ANO, y = PM10.mean)) +
-  geom_line(size = 0.5, color =  colores["PM10"]) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
-  labs(y = bquote(μg / m^3))
-
-p4 <- ggplot(DF, aes(x = ANO, y = PM25.mean)) +
-  geom_line(size = 0.5, color =  colores["PM25"]) +
+p3c <- ggplot(df_confinamiento, aes(x = FECHA, y = PM25.mean, group = 1)) +
+  geom_line(color = colores["PM25"]) +
+  geom_segment(aes(x = ISOdate("2020", "01", "01"), xend = ISOdate("2020", "03", "14"), y = mean_pm25_antes_lockdown, yend = mean_pm25_antes_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "02", "01"), mean_pm25_antes_lockdown, label = 'valor medio antes de confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_segment(aes(x = ISOdate("2020", "03", "14"), xend = ISOdate("2020", "05", "25"), y = mean_pm25_lockdown, yend = mean_pm25_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "04", "15"), mean_pm25_lockdown, label = 'valor medio durante el confinamiento', vjust = -2, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_vline(xintercept = ISOdate("2020", "03", "14"), linetype = 'solid', colour='red') +
   ggtitle("  PM25") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
   labs(y = bquote(μg / m^3))
 
-p5 <- ggplot(DF, aes(x = ANO, y = O3.mean)) +
-  geom_line(size = 0.5, color =  colores["O3"]) +
+p4c <- ggplot(df_confinamiento, aes(x = FECHA, y = PM10.mean, group = 1)) +
+  geom_line(color = colores["PM10"]) +  
+  geom_segment(aes(x = ISOdate("2020", "01", "01"), xend = ISOdate("2020", "03", "14"), y = mean_pm10_antes_lockdown, yend = mean_pm10_antes_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "02", "01"), mean_pm10_antes_lockdown, label = 'valor medio antes de confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_segment(aes(x = ISOdate("2020", "03", "14"), xend = ISOdate("2020", "05", "25"), y = mean_pm10_lockdown, yend = mean_pm10_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "04", "15"), mean_pm10_lockdown, label = 'valor medio durante el confinamiento', vjust = -2, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_vline(xintercept = ISOdate("2020", "03", "14"), linetype = 'solid', colour='red') +
+  ggtitle("  PM10") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+p5c <- ggplot(df_confinamiento, aes(x = FECHA, y = O3.mean, group = 1)) +
+  geom_line(color = colores["O3"]) +
+  geom_segment(aes(x = ISOdate("2020", "01", "01"), xend = ISOdate("2020", "03", "14"), y = mean_o3_antes_lockdown, yend = mean_o3_antes_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "02", "01"), mean_o3_antes_lockdown, label = 'valor medio antes de confinamiento', vjust = -1, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_segment(aes(x = ISOdate("2020", "03", "14"), xend = ISOdate("2020", "05", "25"), y = mean_o3_lockdown, yend = mean_o3_lockdown), linetype = 'dashed') +
+  geom_text(aes(ISOdate("2020", "04", "15"), mean_o3_lockdown, label = 'valor medio durante el confinamiento', vjust = 3, fontface = 'plain', family = 'arial'), size = 3) +
+  geom_vline(xintercept = ISOdate("2020", "03", "14"), linetype = 'solid', colour='red') +
+  ggtitle("  O3") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+plot_confinamiento <- plot_grid(p1c, p2c, p3c, p4c, p5c, nrow = 5, rel_heights = c(1, 1, 1, 1, 1.2))
+save_plot("01_confinamiento.png", plot_confinamiento, base_width = 8, base_height = 8)
+plot_confinamiento
+
+```
+
+Incremento/decremento porcentual
+
+```{r message= FALSE, warning=FALSE}
+
+(mean_so2_lockdown / mean_so2_antes_lockdown - 1 ) * 100
+(mean_no2_lockdown / mean_no2_antes_lockdown - 1 ) * 100
+(mean_pm25_lockdown / mean_pm25_antes_lockdown - 1 ) * 100
+(mean_pm10_lockdown / mean_pm10_antes_lockdown - 1 ) * 100
+(mean_o3_lockdown / mean_o3_antes_lockdown - 1 ) * 100
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+df_confinamiento_lockdown_anio_anterior <- datos_horarios_aire %>% 
+  filter(FECHA > '2019-03-14' & FECHA < '2019-05-25') %>% 
+  ddply(c("ANO", "MES", "DIA"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+
+colnames(df_confinamiento_lockdown_anio_anterior) <- c("ANO", "MES", "DIA", "SO2.ant", "NO2.ant", "PM10.ant", "PM25.ant", "O3.ant")
+
+df_confinamiento_lockdown_anio_anterior <- merge(x = df_confinamiento_lockdown_anio_anterior, y = datos_horarios_aire_lockdown, by = c("MES", "DIA"), all = TRUE)
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+p1c <- ggplot(df_confinamiento_lockdown_anio_anterior, aes(x = FECHA)) +
+  geom_line(aes(y = SO2.mean), color = colores["SO2"]) +
+  geom_line(aes(y = SO2.ant), color = colores["NO2"]) +
+  ggtitle("  SO2") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+p2c <- ggplot(df_confinamiento_lockdown_anio_anterior, aes(x = FECHA)) +
+  geom_line(aes(y = NO2.mean), color = colores["SO2"]) +
+  geom_line(aes(y = NO2.ant), color = colores["NO2"]) +
+  ggtitle("  NO2") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+p3c <- ggplot(df_confinamiento_lockdown_anio_anterior, aes(x = FECHA)) +
+  geom_line(aes(y = PM10.mean), color = colores["SO2"]) +
+  geom_line(aes(y = PM10.ant), color = colores["NO2"]) +
+  ggtitle("  PM10") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+p4c <- ggplot(df_confinamiento_lockdown_anio_anterior, aes(x = FECHA)) +
+  geom_line(aes(y = PM25.mean), color = colores["SO2"]) +
+  geom_line(aes(y = PM25.ant), color = colores["NO2"]) +
+  ggtitle("  PM25") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks.x = element_blank(), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+p5c <- ggplot(df_confinamiento_lockdown_anio_anterior, aes(x = FECHA)) +
+  geom_line(aes(y = O3.mean), color = colores["SO2"]) +
+  geom_line(aes(y = O3.ant), color = colores["NO2"]) +
+  ggtitle("  O3") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), panel.grid.major.y = element_blank()) + 
+  labs(y = bquote(μg / m^3))
+
+plot_confinamiento_ant <- plot_grid(p1c, p2c, p3c, p4c, p5c, nrow = 5, rel_heights = c(1, 1, 1, 1, 1.2))
+save_plot("01_confinamiento_ant.png", plot_confinamiento_ant, base_width = 8, base_height = 8)
+plot_confinamiento_ant
+
+```
+
+
+
+### Análisis Madrid ZBEDEP
+
+```{r message= FALSE, warning=FALSE}
+
+# Cogemos un periodo de un año desde la entrada en vigor de Madrid central y el mismo periodo del año anterior para su comparación. Además, cogemos únicamente las estaciones que están dentro de Madrid Central.
+df_zbedep <- datos_horarios_aire %>% 
+  filter(FECHA >= '2017-11-30' & FECHA <= '2019-11-30' & ESTACION == 35) %>% 
+  ddply(c("ANO", "MES", "DIA"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+
+# Añadimos la columna con la fecha
+df_zbedep$FECHA <- ISOdate(as.integer(df_zbedep$ANO), as.integer(df_zbedep$MES), as.integer(df_zbedep$DIA))
+
+# Añadimos una columna tipo para mostrar boxplot de comparación
+df_zbedep <- df_zbedep %>% 
+  mutate(TIPO = case_when(
+    FECHA < '2018-11-30' ~ "NO ZBEDEP",
+    TRUE ~ "ZBEDEP"))
+
+```
+
+
+```{r message= FALSE, warning=FALSE}
+
+p1z  <- ggplot(df_zbedep, aes(x = as.factor(TIPO), y = NO2.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep$NO2.mean, c(0.1, 0.9), na.rm = TRUE)) +
+  ggtitle("  NO2") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), legend.position = "none") + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p2z  <- ggplot(df_zbedep, aes(x = as.factor(TIPO), y = SO2.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep$SO2.mean, c(0.1, 0.9), na.rm = TRUE)) +
+  ggtitle("  SO2") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), legend.position = "none") + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+p3z  <- ggplot(df_zbedep, aes(x = as.factor(TIPO), y = O3.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep$O3, c(0.1, 0.9), na.rm = TRUE)) +
   ggtitle("  O3") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98)) + 
-  labs(x = "Año", y = bquote(μg / m^3))
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+plot_zbedep <- plot_grid(p1z, p2z, p3z, nrow = 1, rel_widths = c(0.75, 0.75, 1))
+save_plot("01_zbedep.png", plot_zbedep, base_width = 15, base_height = 3)
+plot_zbedep
+
 ```
 
 ```{r message= FALSE, warning=FALSE}
-#library(cowplot)
-#library(egg)
-p <- plot_grid(p1, p2, p3, p4, p5, nrow = 5, rel_heights = c(1, 1, 1, 1, 1.2))
-save_plot("prueba.png", p, base_width = 8, base_height = 8)
+
+# Cogemos un periodo de un año desde la entrada en vigor de Madrid central y el mismo periodo del año anterior para su comparación. Además, cogemos únicamente las estaciones que están dentro de Madrid Central.
+df_zbedep_todas_estaciones <- datos_horarios_aire %>% 
+  filter(FECHA >= '2017-11-30' & FECHA <= '2019-11-30') %>% 
+  ddply(c("ANO", "MES", "DIA"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+
+# Añadimos la columna con la fecha
+df_zbedep_todas_estaciones$FECHA <- ISOdate(as.integer(df_zbedep_todas_estaciones$ANO), as.integer(df_zbedep_todas_estaciones$MES), as.integer(df_zbedep_todas_estaciones$DIA))
+
+# Añadimos una columna tipo para mostrar boxplot de comparación
+df_zbedep_todas_estaciones <- df_zbedep_todas_estaciones %>% 
+  mutate(TIPO = case_when(
+    FECHA < '2018-11-30' ~ "NO ZBEDEP",
+    TRUE ~ "ZBEDEP"))
+
 ```
-
-
-
-Distribución por estaciones
 
 ```{r message= FALSE, warning=FALSE}
 
-p1 <- ggplot(datos_horarios_aire, aes(x = as.factor(ESTACION), y = SO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p2 <- ggplot(datos_horarios_aire, aes(x = as.factor(ESTACION), y = NO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$NO2, c(0.1, 0.9), na.rm = TRUE)) +
+p1z  <- ggplot(df_zbedep_todas_estaciones, aes(x = as.factor(TIPO), y = NO2.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep_todas_estaciones$NO2.mean, c(0.1, 0.9), na.rm = TRUE)) +
   ggtitle("  NO2") +
   theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), legend.position = "none") + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
 
-p3 <- ggplot(datos_horarios_aire, aes(x = as.factor(ESTACION), y = PM10)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$PM10, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p4 <- ggplot(datos_horarios_aire, aes(x = as.factor(ESTACION), y = PM25)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$PM25, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p5 <- ggplot(datos_horarios_aire, aes(x = as.factor(ESTACION), y = O3)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$O3, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-p <- plot_grid(p1, p2, p3, p4, p5, ncol = 2)
-save_plot("prueba2.png", p, base_width = 10, base_height = 8)
-
-```
-
-Distribución por tipo de estación
-
-```{r message= FALSE, warning=FALSE}
-
-p1 <- ggplot(datos_horarios_aire, aes(x = as.factor(NOM_TIPO), y = SO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
+p2z  <- ggplot(df_zbedep_todas_estaciones, aes(x = as.factor(TIPO), y = SO2.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep_todas_estaciones$SO2.mean, c(0.1, 0.9), na.rm = TRUE)) +
   ggtitle("  SO2") +
   theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98), legend.position = "none") + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
 
-p2 <- ggplot(datos_horarios_aire, aes(x = as.factor(NOM_TIPO), y = NO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$NO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p3 <- ggplot(datos_horarios_aire, aes(x = as.factor(NOM_TIPO), y = PM10)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$PM10, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p4 <- ggplot(datos_horarios_aire, aes(x = as.factor(NOM_TIPO), y = PM25)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$PM25, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
-
-p5 <- ggplot(datos_horarios_aire, aes(x = as.factor(NOM_TIPO), y = O3)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$O3, c(0.1, 0.9), na.rm = TRUE)) +
+p3z  <- ggplot(df_zbedep_todas_estaciones, aes(x = as.factor(TIPO), y = O3.mean, fill = TIPO)) +
+  geom_boxplot(width = 0.4, color = "black", alpha = 0.7) +
+  scale_fill_manual(values=c("#999999", "#E69F00")) +
+  scale_y_continuous(limits = quantile(df_zbedep_todas_estaciones$O3, c(0.1, 0.9), na.rm = TRUE)) +
   ggtitle("  O3") +
   theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Estación", y = bquote(μg / m^3))
+  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20), hjust = 0.98)) + 
+  labs(x = element_blank(),y = bquote(μg / m^3))
+
+plot_zbedep <- plot_grid(p1z, p2z, p3z, nrow = 1, rel_widths = c(0.75, 0.75, 1))
+save_plot("01_zbedep_todas.png", plot_zbedep, base_width = 15, base_height = 3)
+plot_zbedep
 
 ```
 
 ```{r message= FALSE, warning=FALSE}
 
-p <- plot_grid(p1, p2, p3, p4, p5, ncol = 2)
-save_plot("prueba3.png", p, base_width = 10, base_height = 8)
+df_zbedep_antes <- df_zbedep %>% 
+  filter(TIPO == "NO ZBEDEP")
+df_zbedep_despues <- df_zbedep %>% 
+  filter(TIPO == "ZBEDEP")
+df_zbedep_todas_antes <- df_zbedep_todas_estaciones %>% 
+  filter(TIPO == "NO ZBEDEP")
+df_zbedep_todas_despues <- df_zbedep_todas_estaciones %>% 
+  filter(TIPO == "ZBEDEP")
 
-```
-
-
-Distribución mensual
-
-```{r message= FALSE, warning=FALSE}
-
-p1 <- ggplot(datos_horarios_aire, aes(x = as.factor(MES), y = SO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p2 <- ggplot(datos_horarios_aire, aes(x = as.factor(MES), y = NO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p3 <- ggplot(datos_horarios_aire, aes(x = as.factor(MES), y = PM10)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p4 <- ggplot(datos_horarios_aire, aes(x = as.factor(MES), y = PM25)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p5 <- ggplot(datos_horarios_aire, aes(x = as.factor(MES), y = O3)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-p <- plot_grid(p1, p2, p3, p4, p5, ncol = 2)
-save_plot("prueba4.png", p, base_width = 10, base_height = 8)
-
-```
-
-Distribución horaria
-
-```{r message= FALSE, warning=FALSE}
-
-p1 <- ggplot(datos_horarios_aire, aes(x = as.factor(HORA), y = SO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["SO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  SO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p2 <- ggplot(datos_horarios_aire, aes(x = as.factor(HORA), y = NO2)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["NO2"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  NO2") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p3 <- ggplot(datos_horarios_aire, aes(x = as.factor(HORA), y = PM10)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM10"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM10") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p4 <- ggplot(datos_horarios_aire, aes(x = as.factor(HORA), y = PM25)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["PM25"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  PM25") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-p5 <- ggplot(datos_horarios_aire, aes(x = as.factor(HORA), y = O3)) +
-  geom_boxplot(width = 0.4, color = "black", fill = colores["O3"], alpha = 0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_aire$SO2, c(0.1, 0.9), na.rm = TRUE)) +
-  ggtitle("  O3") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 10, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-p <- plot_grid(p1, p2, p3, p4, p5, ncol = 2)
-save_plot("prueba5.png", p, base_width = 10, base_height = 8)
+(mean(df_zbedep_antes$NO2.mean, na.rm = TRUE) / mean(df_zbedep_despues$NO2.mean, na.rm = TRUE) - 1) * 100
+(mean(df_zbedep_todas_antes$NO2.mean, na.rm = TRUE) / mean(df_zbedep_todas_despues$NO2.mean, na.rm = TRUE) - 1) * 100
+(mean(df_zbedep_antes$SO2.mean, na.rm = TRUE) / mean(df_zbedep_despues$SO2.mean, na.rm = TRUE) - 1) * 100
+(mean(df_zbedep_todas_antes$SO2.mean, na.rm = TRUE) / mean(df_zbedep_todas_despues$SO2.mean, na.rm = TRUE) - 1) * 100
+(mean(df_zbedep_antes$O3.mean, na.rm = TRUE) / mean(df_zbedep_despues$O3.mean, na.rm = TRUE) - 1) * 100
+(mean(df_zbedep_todas_antes$O3.mean, na.rm = TRUE) / mean(df_zbedep_todas_despues$O3.mean, na.rm = TRUE) - 1) * 100
 
 ```
 

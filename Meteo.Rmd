@@ -27,36 +27,38 @@ library(dplyr)
 library(tidyr)
 library(tidyverse)
 library(lubridate)
+library(readr)
 library(ggplot2)
+library(zoo)
+library(openair)
+library(corrplot)
 
 ```
 
-## Análisis y acondicionado de juego de datos de calidad del aire
+## Carga y limpieza del juego de datos diraios meteorológicos
 
-### Carga y limpieza del juego de datos diraios de calidad del aire
-
-Cargamos en primer lugar el conjunto de datos meteorológicos diariosvemos su estructura.
+Cargamos en primer lugar el conjunto de datos meteorológicos horarios y vemos su estructura.
 
 ```{r message= FALSE, warning=FALSE}
 
-mydir = "Datos meteo diarios"
-myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE)
-datos_diarios_meteo <- lapply(myFiles, read_csv2) %>% bind_rows()
-str(datos_diarios_meteo)
+mydir = "Datos horarios meteo"
+myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE, recursive = TRUE)
+datos_horarios_meteo <- myFiles %>% map_df(~read_csv2(.x, show_col_types = FALSE) %>% mutate(MES = as.character(MES)))
+str(datos_horarios_meteo)
 
 ```
 
 Cada registro está estructurado de la siguiente forma:
 
-PROVINCIA, MUNICIPIO, ESTACION, MAGNITUD, PUNTO_MUESTREO, ANO, MES, D01, V01, D02, V02...
+PROVINCIA, MUNICIPIO, ESTACION, MAGNITUD, PUNTO_MUESTREO, ANO, MES, H01, V01, H02, V02... H24, V24
 
-Donde D01 corresponde al dato del primer día del mes, D02 al del segundo día y así sucesivamente.
+Donde H01 corresponde al dato de la primera hora, H02 la segunda y así sucesivamente.
 
 Vamos a ver ahora los distintos valores para la columna MAGNITUD. Estos valores nos identifican los distintos datos que se miden en cada una de las estaciones:
 
 ```{r message= FALSE, warning=FALSE}
 
-distinct(datos_diarios_meteo, MAGNITUD)
+distinct(datos_horarios_meteo, MAGNITUD)
 
 ```
 
@@ -79,45 +81,39 @@ cat("
 
 ```
 
+Se puede encontrar más detalle de cada uno de los tipos de contaminantes en el portal web de calidad del aire del ayuntamiento de Madrid (http://www.mambiente.madrid.es/opencms/opencms/calaire/ContAtmosferica/Contaminantes/Tipos.html).
+
 Las columnas Vx identifican los valores que han sido validados. Vamos a limpiar en primer lugar los datos no validados.
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_diarios_meteo$D01 <- ifelse(datos_diarios_meteo$V01 == "N", NA, datos_diarios_meteo$D01)
-datos_diarios_meteo$D02 <- ifelse(datos_diarios_meteo$V02 == "N", NA, datos_diarios_meteo$D02)
-datos_diarios_meteo$D03 <- ifelse(datos_diarios_meteo$V03 == "N", NA, datos_diarios_meteo$D03)
-datos_diarios_meteo$D04 <- ifelse(datos_diarios_meteo$V04 == "N", NA, datos_diarios_meteo$D04)
-datos_diarios_meteo$D05 <- ifelse(datos_diarios_meteo$V05 == "N", NA, datos_diarios_meteo$D05)
-datos_diarios_meteo$D06 <- ifelse(datos_diarios_meteo$V06 == "N", NA, datos_diarios_meteo$D06)
-datos_diarios_meteo$D07 <- ifelse(datos_diarios_meteo$V07 == "N", NA, datos_diarios_meteo$D07)
-datos_diarios_meteo$D08 <- ifelse(datos_diarios_meteo$V08 == "N", NA, datos_diarios_meteo$D08)
-datos_diarios_meteo$D09 <- ifelse(datos_diarios_meteo$V09 == "N", NA, datos_diarios_meteo$D09)
-datos_diarios_meteo$D10 <- ifelse(datos_diarios_meteo$V10 == "N", NA, datos_diarios_meteo$D10)
-datos_diarios_meteo$D11 <- ifelse(datos_diarios_meteo$V11 == "N", NA, datos_diarios_meteo$D11)
-datos_diarios_meteo$D12 <- ifelse(datos_diarios_meteo$V12 == "N", NA, datos_diarios_meteo$D12)
-datos_diarios_meteo$D13 <- ifelse(datos_diarios_meteo$V13 == "N", NA, datos_diarios_meteo$D13)
-datos_diarios_meteo$D14 <- ifelse(datos_diarios_meteo$V14 == "N", NA, datos_diarios_meteo$D14)
-datos_diarios_meteo$D15 <- ifelse(datos_diarios_meteo$V15 == "N", NA, datos_diarios_meteo$D15)
-datos_diarios_meteo$D16 <- ifelse(datos_diarios_meteo$V16 == "N", NA, datos_diarios_meteo$D16)
-datos_diarios_meteo$D17 <- ifelse(datos_diarios_meteo$V17 == "N", NA, datos_diarios_meteo$D17)
-datos_diarios_meteo$D18 <- ifelse(datos_diarios_meteo$V18 == "N", NA, datos_diarios_meteo$D18)
-datos_diarios_meteo$D19 <- ifelse(datos_diarios_meteo$V19 == "N", NA, datos_diarios_meteo$D19)
-datos_diarios_meteo$D20 <- ifelse(datos_diarios_meteo$V20 == "N", NA, datos_diarios_meteo$D20)
-datos_diarios_meteo$D21 <- ifelse(datos_diarios_meteo$V21 == "N", NA, datos_diarios_meteo$D21)
-datos_diarios_meteo$D22 <- ifelse(datos_diarios_meteo$V22 == "N", NA, datos_diarios_meteo$D22)
-datos_diarios_meteo$D23 <- ifelse(datos_diarios_meteo$V23 == "N", NA, datos_diarios_meteo$D23)
-datos_diarios_meteo$D24 <- ifelse(datos_diarios_meteo$V24 == "N", NA, datos_diarios_meteo$D24)
-datos_diarios_meteo$D25 <- ifelse(datos_diarios_meteo$V25 == "N", NA, datos_diarios_meteo$D25)
-datos_diarios_meteo$D26 <- ifelse(datos_diarios_meteo$V26 == "N", NA, datos_diarios_meteo$D26)
-datos_diarios_meteo$D27 <- ifelse(datos_diarios_meteo$V27 == "N", NA, datos_diarios_meteo$D27)
-datos_diarios_meteo$D28 <- ifelse(datos_diarios_meteo$V28 == "N", NA, datos_diarios_meteo$D28)
-datos_diarios_meteo$D29 <- ifelse(datos_diarios_meteo$V29 == "N", NA, datos_diarios_meteo$D29)
-datos_diarios_meteo$D30 <- ifelse(datos_diarios_meteo$V30 == "N", NA, datos_diarios_meteo$D30)
-datos_diarios_meteo$D31 <- ifelse(datos_diarios_meteo$V31 == "N", NA, datos_diarios_meteo$D31)
+datos_horarios_meteo$H01 <- ifelse(datos_horarios_meteo$V01 == "N", NA, datos_horarios_meteo$H01)
+datos_horarios_meteo$H02 <- ifelse(datos_horarios_meteo$V02 == "N", NA, datos_horarios_meteo$H02)
+datos_horarios_meteo$H03 <- ifelse(datos_horarios_meteo$V03 == "N", NA, datos_horarios_meteo$H03)
+datos_horarios_meteo$H04 <- ifelse(datos_horarios_meteo$V04 == "N", NA, datos_horarios_meteo$H04)
+datos_horarios_meteo$H05 <- ifelse(datos_horarios_meteo$V05 == "N", NA, datos_horarios_meteo$H05)
+datos_horarios_meteo$H06 <- ifelse(datos_horarios_meteo$V06 == "N", NA, datos_horarios_meteo$H06)
+datos_horarios_meteo$H07 <- ifelse(datos_horarios_meteo$V07 == "N", NA, datos_horarios_meteo$H07)
+datos_horarios_meteo$H08 <- ifelse(datos_horarios_meteo$V08 == "N", NA, datos_horarios_meteo$H08)
+datos_horarios_meteo$H09 <- ifelse(datos_horarios_meteo$V09 == "N", NA, datos_horarios_meteo$H09)
+datos_horarios_meteo$H10 <- ifelse(datos_horarios_meteo$V10 == "N", NA, datos_horarios_meteo$H10)
+datos_horarios_meteo$H11 <- ifelse(datos_horarios_meteo$V11 == "N", NA, datos_horarios_meteo$H11)
+datos_horarios_meteo$H12 <- ifelse(datos_horarios_meteo$V12 == "N", NA, datos_horarios_meteo$H12)
+datos_horarios_meteo$H13 <- ifelse(datos_horarios_meteo$V13 == "N", NA, datos_horarios_meteo$H13)
+datos_horarios_meteo$H14 <- ifelse(datos_horarios_meteo$V14 == "N", NA, datos_horarios_meteo$H14)
+datos_horarios_meteo$H15 <- ifelse(datos_horarios_meteo$V15 == "N", NA, datos_horarios_meteo$H15)
+datos_horarios_meteo$H16 <- ifelse(datos_horarios_meteo$V16 == "N", NA, datos_horarios_meteo$H16)
+datos_horarios_meteo$H17 <- ifelse(datos_horarios_meteo$V17 == "N", NA, datos_horarios_meteo$H17)
+datos_horarios_meteo$H18 <- ifelse(datos_horarios_meteo$V18 == "N", NA, datos_horarios_meteo$H18)
+datos_horarios_meteo$H19 <- ifelse(datos_horarios_meteo$V19 == "N", NA, datos_horarios_meteo$H19)
+datos_horarios_meteo$H20 <- ifelse(datos_horarios_meteo$V20 == "N", NA, datos_horarios_meteo$H20)
+datos_horarios_meteo$H21 <- ifelse(datos_horarios_meteo$V21 == "N", NA, datos_horarios_meteo$H21)
+datos_horarios_meteo$H22 <- ifelse(datos_horarios_meteo$V22 == "N", NA, datos_horarios_meteo$H22)
+datos_horarios_meteo$H23 <- ifelse(datos_horarios_meteo$V23 == "N", NA, datos_horarios_meteo$H23)
+datos_horarios_meteo$H24 <- ifelse(datos_horarios_meteo$V24 == "N", NA, datos_horarios_meteo$H24)
 
 
 ```
-
 
 Vamos a eliminar algunas de las columnas que no nos aportan información:
 
@@ -127,17 +123,17 @@ Vamos a eliminar algunas de las columnas que no nos aportan información:
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_diarios_meteo <- datos_diarios_meteo[, -grep("^V", colnames(datos_diarios_meteo))]
-datos_diarios_meteo <- subset(datos_diarios_meteo, select = -c(PROVINCIA, MUNICIPIO, PUNTO_MUESTREO))
+datos_horarios_meteo <- datos_horarios_meteo[, -grep("^V", colnames(datos_horarios_meteo))]
+datos_horarios_meteo <- subset(datos_horarios_meteo, select = -c(PROVINCIA, MUNICIPIO, PUNTO_MUESTREO))
 
 ```
 
-A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que los días pasaran a ser filas (cada fila corresponderá a un día).
+A continuación, reorganizamos nuestro dataframe de manera que las distintas magnitudes se muestren como columnas, mientras que las horas pasaran a ser filas (cada fila corresponderá a una hora).
 
 ```{r message= FALSE, warning=FALSE}
 
-datos_diarios_meteo <- datos_diarios_meteo %>%
-  gather("DIA", "VALOR", D01:D31) %>%
+datos_horarios_meteo <- datos_horarios_meteo %>%
+  gather("HORA", "VALOR", H01:H24) %>%
   spread(key = MAGNITUD, value = "VALOR")
 
 ```
@@ -146,203 +142,183 @@ Por último, cambiamos el nombre de las columnas para poner un nombre significat
 
 ```{r message= FALSE, warning=FALSE}
 
-colnames(datos_diarios_meteo) <- c("ESTACION", "ANO", "MES", "DIA", "VEL_VIENTO", "DIR_VIENTO", "TEMPERATURA", "HUMEDAD", "PRESION", "RADIACION", "PRECIPITACION")
+colnames(datos_horarios_meteo) <- c("ESTACION", "ANO", "MES", "DIA", "HORA", "RADIACION_UV", "VEL_VIENTO", "DIR_VIENTO", "TEMPERATURA", "HUMEDAD", "PRESION", "RADIACION_SOLAR", "PRECIPITACION")
 
-datos_diarios_meteo$VEL_VIENTO <- as.numeric(datos_diarios_meteo$VEL_VIENTO)
-datos_diarios_meteo$DIR_VIENTO <- as.numeric(datos_diarios_meteo$DIR_VIENTO)
-datos_diarios_meteo$TEMPERATURA <- as.numeric(datos_diarios_meteo$TEMPERATURA)
-datos_diarios_meteo$HUMEDAD <- as.numeric(datos_diarios_meteo$HUMEDAD)
-datos_diarios_meteo$PRESION <- as.numeric(datos_diarios_meteo$PRESION)
-datos_diarios_meteo$RADIACION <- as.numeric(datos_diarios_meteo$RADIACION)
-datos_diarios_meteo$PRECIPITACION <- as.numeric(datos_diarios_meteo$PRECIPITACION)
-
-datos_diarios_meteo$ANO <- as.factor(datos_diarios_meteo$ANO)
-datos_diarios_meteo$ESTACION <- as.factor(datos_diarios_meteo$ESTACION)
-
-summary(datos_diarios_meteo)
-
-```
-
-
-### Carga de juego de datos con información de estaciones
-
-Cargamos el conjunto de datos con informaciones de las estaciones de control y vemos su estructura.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_estaciones_meteo <- read_csv2("Estaciones meteo/Estaciones_control_datos_meteorologicos.csv", locale(encoding = "ISO-8859-1"), col_names = TRUE, col_types = NULL)
-str(datos_estaciones_meteo)
-
-```
-
-Vamos a obviar la información geográfica para el análisis en R y vamos a quedarnos únicamente con el nombre.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_estaciones_meteo <- datos_estaciones_meteo[,c("CÓDIGO_CORTO", "ESTACIÓN")]
-
-```
-
-Añadimos esta información al conjunto de datos diarios de calidad del aire.
-
-```{r message= FALSE, warning=FALSE}
-
-datos_diarios_meteo <- merge(x = datos_diarios_meteo, y = datos_estaciones_meteo, by.x = "ESTACION", by.y = "CÓDIGO_CORTO", all = TRUE)
-colnames(datos_diarios_meteo)[12] <- "NOM_ESTACION"
-
-```
-
-### Análisis de datos meteorológicos
-
-Outliers
-
-```{r message= FALSE, warning=FALSE}
-
-ggplot(datos_diarios_meteo, aes(y = VEL_VIENTO)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  VEL_VIENTO") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = DIR_VIENTO)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  DIR_VIENTO") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = TEMPERATURA)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  TEMPERATURA") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = HUMEDAD)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  HUMEDAD") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = PRESION)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  PRESION") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = RADIACION)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  RADIACION") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-ggplot(datos_diarios_meteo, aes(y = PRECIPITACION)) +
-  geom_boxplot(width = 0.4) +
-  ggtitle("  PRECIPITACION") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(y = bquote(μg / m^3))
-
-```
-
-
-
-
-
-
-
-
-```{r message= FALSE, warning=FALSE}
-
-write_csv(datos_diarios_aire, path = "datos_diarios_aire.csv", append = FALSE, col_names = TRUE, na = '')
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-```{r message= FALSE, warning=FALSE}
-
-mydir = "Datos meteo horarios"
-myFiles = list.files(path = mydir, pattern = "*.csv", full.names = TRUE, recursive = TRUE)
-datos_horarios_meteo <- myFiles %>% map_df(~read_csv2(.x) %>% mutate(MES = as.character(MES)))
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-datos_horarios_meteo <- datos_horarios_meteo[, -grep("^V", colnames(datos_horarios_meteo))]
-datos_horarios_meteo <- subset(datos_horarios_meteo, select = -c(PROVINCIA, MUNICIPIO, PUNTO_MUESTREO))
-
-datos_horarios_meteo <- datos_horarios_meteo %>%
-  gather("HORA", "VALOR", H01:H24) %>%
-  spread(key = MAGNITUD, value = "VALOR")
-
-```
-
-```{r message= FALSE, warning=FALSE}
-
-colnames(datos_horarios_meteo) <- c("ESTACION", "ANO", "MES", "DIA", "HORA", "VEL_VIENTO", "DIR_VIENTO", "TEMPERATURA", "HUMEDAD", "PRESION", "RADIACION", "PRECIPITACION")
-
+datos_horarios_meteo$RADIACION_UV <- as.numeric(datos_horarios_meteo$RADIACION_UV)
 datos_horarios_meteo$VEL_VIENTO <- as.numeric(datos_horarios_meteo$VEL_VIENTO)
 datos_horarios_meteo$DIR_VIENTO <- as.numeric(datos_horarios_meteo$DIR_VIENTO)
 datos_horarios_meteo$TEMPERATURA <- as.numeric(datos_horarios_meteo$TEMPERATURA)
 datos_horarios_meteo$HUMEDAD <- as.numeric(datos_horarios_meteo$HUMEDAD)
 datos_horarios_meteo$PRESION <- as.numeric(datos_horarios_meteo$PRESION)
-datos_horarios_meteo$RADIACION <- as.numeric(datos_horarios_meteo$RADIACION)
+datos_horarios_meteo$RADIACION_SOLAR <- as.numeric(datos_horarios_meteo$RADIACION_SOLAR)
 datos_horarios_meteo$PRECIPITACION <- as.numeric(datos_horarios_meteo$PRECIPITACION)
-
-datos_horarios_meteo$ANO <- as.factor(datos_horarios_meteo$ANO)
-datos_horarios_meteo$MES <- as.factor(datos_horarios_meteo$MES)
-datos_horarios_meteo$ESTACION <- as.factor(datos_horarios_meteo$ESTACION)
 
 summary(datos_horarios_meteo)
 
 ```
 
-```{r message= FALSE, warning=FALSE}
-
-head(datos_horarios_meteo)
-
-```
+Vamos a guardar nuestro dataset en un fichero csv que utilizaremos para los modelos predictivos.
 
 ```{r message= FALSE, warning=FALSE}
 
-ggplot(datos_horarios_meteo, aes(x = MES, y = VEL_VIENTO)) +
-  geom_boxplot(width = 0.4, color="black", fill="blue", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_meteo$VEL_VIENTO, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'VEL_VIENTO'), color = 'black') +
-  ggtitle("  Velocidad el viento") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Mes", y = bquote(μg / m^3))
+write_csv(datos_horarios_meteo, path = "datos_horarios_meteo.csv", append = FALSE, col_names = TRUE, na = '')
 
 ```
+
+## Carga de juego de datos con información de estaciones
+
+Cargamos el conjunto de datos con informaciones de las estaciones meteorlógica y vemos su estructura.
 
 ```{r message= FALSE, warning=FALSE}
 
-ggplot(datos_horarios_meteo, aes(x = HORA, y = VEL_VIENTO)) +
-  geom_boxplot(width = 0.4, color="black", fill="blue", alpha=0.7) +
-  scale_y_continuous(limits = quantile(datos_horarios_meteo$VEL_VIENTO, c(0.1, 0.9), na.rm = TRUE)) +
-  stat_summary(fun = median, geom = 'line', aes(group = 'VEL_VIENTO'), color = 'black') +
-  ggtitle("  VEL_VIENTO") +
-  theme_bw() + 
-  theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold', margin = margin(t = 40, b = -20))) + 
-  labs(x = "Hora", y = bquote(μg / m^3))
+datos_estaciones_meteo <- read_delim("Estaciones meteo/Estaciones_control_datos_meteorologicos.csv", delim = ";", locale = locale(encoding = "windows-1252"))
+str(datos_estaciones_meteo)
+
+```
+
+Miramos las parámetros que registran cada una de estas estaciones.
+
+```{r message= FALSE, warning=FALSE}
+
+datos_estaciones_meteo[,c(2, 8:14)]
+
+```
+
+El siguiente paso es unir la información que tenemos en los dos juegos de datos. Se pretende unir para cada estación, tanto la información meteorológica como de calidad del aire. Sin embargo, no todas las estaciones tienen datos de ambos conjuntos y no todas las estaciones disponen de todos los datos.
+
+Para intentar disponer del mayor número de datos posibles, se identifican tres estaciones meteorológicas que sí recogen información para todos los datos y que se encuentran muy próximas a otras tres estaciones que disponen de menos datos (las parejas de estaciones son 102-36, 103-17 y 108-39). La localización de todas las estaciones se puede ver en el portal web de calidad del aire del Ayuntamiento de Madrid.
+
+Además, vamos a eliminar la información de radiación ultravioleta (80) ya que no hay datos en 675860 observaciones de las 685896 de las que disponemos.
+
+```{r message= FALSE, warning=FALSE}
+
+meteo_all <- na.omit(datos_horarios_meteo[, c(1:5, 7:13)])
+meteo_all$ESTACION[meteo_all$ESTACION == 102] <- 36
+meteo_all$ESTACION[meteo_all$ESTACION == 103] <- 17
+meteo_all$ESTACION[meteo_all$ESTACION == 108] <- 39
+
+```
+
+Vamos a cargar el juego de datos con información de calidad del aire que creamos en el script Aire.Rmd. Únicamente vamos a necesitar las observaciones completas a partir de 2018 pues las vamos a juntar con los datos meteorológicos.
+
+```{r message= FALSE, warning=FALSE}
+
+datos_horarios_aire <- read_delim("datos_horarios_aire.csv", delim = ',')
+aire_all <- na.omit(datos_horarios_aire[datos_horarios_aire$ANO >= 2018,])
+
+```
+
+## Análisis de datos meteorológicos
+
+Unimos en un único dataset la información de calidad del aire con su correspondiente meteorológica.
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima <- inner_join(aire_all, meteo_all, by = c("ESTACION", "ANO", "MES", "DIA", "HORA"))
+
+```
+
+Vamos a ver en primer lugar la correlación entre las distintas variables. Usamos el coeficiente de correlación de Pearson.
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima2 <- df_clima[, c(6:10, 14:20)]
+corrplot(cor(df_clima2), method = "number", addCoef.col = 1, tl.cex = 0.7)
+
+
+```
+
+Vemos gráficamente algunas de las relaciones más altas encontradas entre agentes contaminantes y varaibles meteorológicas.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+nom_meses <- c("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
+
+p1 <- ggplot(df_clima, aes(x = VEL_VIENTO, y = NO2)) + 
+  geom_point(aes(col = factor(MES, labels = nom_meses))) + 
+  geom_smooth(method = "loess", se = F) + 
+  theme_bw() +
+  labs(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), title="Velocidad del Viento Vs Dióxido de Nitrógeno (NO2)", y="Dióxido de Nitrógeno (NO2)", x="Velocidad del viento", color = "Mes")
+
+p2 <- ggplot(df_clima, aes(x = VEL_VIENTO, y = O3)) + 
+  geom_point(aes(col = factor(MES, labels = nom_meses))) + 
+  geom_smooth(method = "loess", se = F) + 
+  theme_bw() +
+  labs(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), title="Velocidad del Viento Vs Ozono (O3)", y="Ozono (O3)", x="Velocidad del viento", color = "Mes")
+
+p3 <- ggplot(df_clima, aes(x = TEMPERATURA, y = O3)) + 
+  geom_point(aes(col = factor(MES, labels = nom_meses))) + 
+  geom_smooth(method = "loess", se = F) + 
+  theme_bw() +
+  labs(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), title="Temperatura vs Ozono (O3)", y="Ozono (O3)", x="Temperatura", color = "Mes")
+
+p4 <- ggplot(df_clima, aes(x = RADIACION_SOLAR, y = O3)) + 
+  geom_point(aes(col = factor(MES, labels = nom_meses))) + 
+  geom_smooth(method = "loess", se = F) + 
+  theme_bw() +
+  labs(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), title="Radiación Solar Vs Ozono (O3)", y="Ozono (O3)", x="Radiación Solar", color = "Mes")
+
+p5 <- ggplot(df_clima, aes(x = HUMEDAD, y = O3)) + 
+  geom_point(aes(col = factor(MES, labels = nom_meses))) + 
+  geom_smooth(method = "loess", se = F) + 
+  theme_bw() +
+  labs(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), title="Humedad Vs Ozono (O3)", y="Ozono (O3)", x="Humedad", color = "Mes")
+
+plot_cor <- ggarrange(p1, p2, p3, p4, p5, ncol = 2, nrow = 3, common.legend = TRUE, legend = "right")
+save_plot("01_correlation.png", plot_cor, base_width = 8, base_height = 8)
+plot_cor
+
+```
+
+Vamos ahora a estudiar la velocidad y dirección del viento haciendo uso de la librería openair. Adaptamos en primer lugar el dataframe para utilizarlo como entrada en las funciones de la librería openair.
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima_openair <- df_clima
+colnames(df_clima_openair) <-  c("ESTACION", "ANO", "MES", "DIA", "HORA", "SO2", "NO2", "PM25", "PM10", "O3", "date", "NOM_ESTACION", "NOM_TIPO", "ws", "wd", "TEMPERATURA", "HUMEDAD", "PRESION", "RADIACION_SOLAR", "PRECIPITACION")
+
+```
+
+Generamos el gráfico de tipo rosa de los vientos para ver el comporatmiento del Viento en Madrid
+
+```{r message= FALSE, warning=FALSE}
+
+windRose(df_clima_openair)
 
 ```
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Creamos los gráficos rosa de los vientos de contaminación para PM10 y PM25.
+
+```{r message= FALSE, warning=FALSE}
+
+pollutionRose(df_clima_openair, pollutant = "PM25")
+pollutionRose(df_clima_openair, pollutant = "PM10")
+
+```
+
+Y sus respectivas rosas de percentiles.
+
+```{r message= FALSE, warning=FALSE}
+
+percentileRose(df_clima_openair, pollutant = "PM25", smooth = TRUE)
+percentileRose(df_clima_openair, pollutant = "PM10", smooth = TRUE)
+
+```

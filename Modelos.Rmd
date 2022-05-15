@@ -1,0 +1,380 @@
+---
+title: 'Análisis calidad del aire Madrid'
+author: "Autor: Sergio Romero Córdoba"
+date: "Abril 2022"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Modelos de predicción de calidad del aire
+
+```{r message= FALSE, warning=FALSE}
+
+library(readr)
+library(zoo)
+library(dplyr)
+library(caTools)
+library(ranger)
+library(forecast)
+library(caret)
+library(e1071)
+library(LiblineaR)
+
+```
+
+Vamos a cargar los juegos de datos con información de calidad del aire e información meteorológica que creamos en los scripts Aire.Rmd y Meteo.Rmd respectivamente. Únicamente vamos a necesitar las observaciones completas a partir de 2018 pues las vamos a juntar con los datos meteorológicos.
+
+Para intentar disponer del mayor número de datos posibles, se identifican tres estaciones meteorológicas que sí recogen información para todos los datos y que se encuentran muy próximas a otras tres estaciones que disponen de menos datos (las parejas de estaciones son 102-36, 103-17 y 108-39). La localización de todas las estaciones se puede ver en el portal web de calidad del aire del Ayuntamiento de Madrid.
+
+Además, vamos a eliminar la información de radiación ultravioleta (80) ya que no hay datos en 675860 observaciones de las 685896 de las que disponemos.
+
+```{r message= FALSE, warning=FALSE}
+
+datos_horarios_aire <- read_delim("datos_horarios_aire.csv", delim = ',')
+aire_all <- na.omit(datos_horarios_aire[datos_horarios_aire$ANO >= 2018,])
+
+datos_horarios_meteo <- read_delim("datos_horarios_meteo.csv", delim = ',')
+meteo_all <- na.omit(datos_horarios_meteo[, c(1:5, 7:13)])
+meteo_all$ESTACION[meteo_all$ESTACION == 102] <- 36
+meteo_all$ESTACION[meteo_all$ESTACION == 103] <- 17
+meteo_all$ESTACION[meteo_all$ESTACION == 108] <- 39
+
+```
+
+Vamos a añadir variables al conjunto de datos meteorológicos. En concreto, vamos añadir para cada una de las variables 3 variables nuevas con el valor medio de esa varibles en las últimas 24, 48 y 72 horas. El objetivo es generar modelos no sólamente en base a las condiciones meteorológias del momento sino también en base a las condiciones meteorológicas de las últimas 24, 48 y 72 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+meteo_all <- meteo_all %>%
+    dplyr::arrange(desc(ESTACION)) %>% 
+    dplyr::group_by(ESTACION) %>% 
+    dplyr::mutate(vel_viento_24h = rollmean(VEL_VIENTO, k = 24, fill = NA, align = "right"),
+                  dir_viento_24h = rollmean(DIR_VIENTO, k = 24, fill = NA, align = "right"),
+                  temperatura_24h = rollmean(TEMPERATURA, k = 24, fill = NA, align = "right"),
+                  humedad_24h = rollmean(HUMEDAD, k = 24, fill = NA, align = "right"),
+                  presion_24h = rollmean(PRESION, k = 24, fill = NA, align = "right"),
+                  radiacion_24h = rollmean(RADIACION_SOLAR, k = 24, fill = NA, align = "right"),
+                  precipitacion_24h = rollmean(PRECIPITACION, k = 24, fill = NA, align = "right"),
+                  vel_viento_48h = rollmean(VEL_VIENTO, k = 48, fill = NA, align = "right"),
+                  dir_viento_48h = rollmean(DIR_VIENTO, k = 48, fill = NA, align = "right"),
+                  temperatura_48h = rollmean(TEMPERATURA, k = 48, fill = NA, align = "right"),
+                  humedad_48h = rollmean(HUMEDAD, k = 48, fill = NA, align = "right"),
+                  presion_48h = rollmean(PRESION, k = 48, fill = NA, align = "right"),
+                  radiacion_48h = rollmean(RADIACION_SOLAR, k = 48, fill = NA, align = "right"),
+                  precipitacion_48h = rollmean(PRECIPITACION, k = 48, fill = NA, align = "right"),
+                  vel_viento_72h = rollmean(VEL_VIENTO, k = 72, fill = NA, align = "right"),
+                  dir_viento_72h = rollmean(DIR_VIENTO, k = 72, fill = NA, align = "right"),
+                  temperatura_72h = rollmean(TEMPERATURA, k = 72, fill = NA, align = "right"),
+                  humedad_72h = rollmean(HUMEDAD, k = 72, fill = NA, align = "right"),
+                  presion_72h = rollmean(PRESION, k = 72, fill = NA, align = "right"),
+                  radiacion_72h = rollmean(RADIACION_SOLAR, k = 72, fill = NA, align = "right"),
+                  precipitacion_72h = rollmean(PRECIPITACION, k = 72, fill = NA, align = "right"),
+                 ) %>% 
+  dplyr::ungroup()
+
+# Quitamos algunas observacioens (las primeras 72 horas) que no tienen valor para alguna de las nuevas variables que hemos creado.
+meteo_all <- na.omit(meteo_all)
+
+```
+
+En los siguientes modelos vamos a intentar predecir el índice de calidad del aire. Vamos a calcularlo y guardarlo en una variable
+
+```{r message= FALSE, warning=FALSE}
+
+# El índice de calidad del aire se calcula con los valores horarios de NO2, SO2 y O3 y la media de las últimas 24 horas de las particulas PM10 y PM25, por lo tanto necesitamos calcular en primer lugar la media para estos agentes contaminantes.
+aire_all <- datos_horarios_aire[datos_horarios_aire$ANO >= 2018,] %>%
+    dplyr::arrange(desc(ESTACION)) %>% 
+    dplyr::group_by(ESTACION) %>% 
+    dplyr::mutate(pm10_24h = rollmean(PM10, k = 24, fill = NA, align = "right"),
+                  pm25_24h = rollmean(PM25, k = 24, fill = NA, align = "right")) %>% 
+  dplyr::ungroup()
+
+# El peor valor de los 5 agentes es el que determina el valor del ICA.
+aire_all <- aire_all %>%
+  mutate(ICA = case_when(
+    pm25_24h > 50 | pm10_24h > 100 | NO2 > 400 | O3 > 240 | SO2 > 500  ~ "5",
+    pm25_24h > 25 | pm10_24h > 50 | NO2 > 200 | O3 > 180 | SO2 > 350  ~ "4",
+    pm25_24h > 20 | pm10_24h > 35 | NO2 > 100 | O3 > 120 | SO2 > 200  ~ "3",
+    pm25_24h > 10 | pm10_24h > 20 | NO2 > 40 | O3 > 80 | SO2 > 100  ~ "2",
+    TRUE ~ "1"
+  )
+)
+
+# Transformamos el nuevo campo a tipo factor
+aire_all$ICA <- as.factor(aire_all$ICA)
+
+```
+
+Unimos ahora los datasets de calidad del aire con los datos meteorológicos y mostramos un resumen de los datos de los que disponemos
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima <- inner_join(aire_all, meteo_all, by = c("ESTACION", "ANO", "MES", "DIA", "HORA"))
+df_clima$ESTACION <- as.factor(df_clima$ESTACION)
+df_clima$HORA <- as.factor(df_clima$HORA)
+df_clima$NOM_TIPO <- as.factor(df_clima$NOM_TIPO)
+summary(df_clima)
+
+```
+
+Vamos a intentar predecir el valor del ICA. La mayoría de las observaciones tienen valor 1 o 2.
+
+Vamos a crear 4 datasets diferentes con los datos meteorológicos del momento, la media de las últimas 24 horas, la media de las últimas 48 horas y las últimas 72 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima0 <- df_clima[, c(1, 5, 13, 16:23)]
+df_clima1 <- df_clima[, c(1, 5, 13, 16, 24:30)]
+df_clima2 <- df_clima[, c(1, 5, 13, 16, 31:37)]
+df_clima3 <- df_clima[, c(1, 5, 13, 16, 38:44)]
+  
+```
+
+## Random Forest
+
+Creamos un grid de hiperparámetros que vamos a evaluar. Estos parámetros son:
+- num_trees: número de árboles
+- mtry: número de variables posibles en cada nodo
+- max_depth: máxima profundidad que pueden tener los árboles
+
+```{r message= FALSE, warning=FALSE}
+
+# Grid de hiperparámetros evaluados
+param_grid = expand_grid(
+                'num_trees' = c(50, 100, 200),
+                'mtry'      = c(3, 5, 7),
+                'max_depth' = c(10, 20, 0)
+             )
+
+# Loop para ajustar un modelo con cada combinación de hiperparámetros
+oob_error = rep(NA, nrow(param_grid))
+
+```
+
+### Modelo 1: Datos climatológicos del mismo día.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima0, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados <- param_grid
+resultados$oob_error <- oob_error
+resultados <- resultados %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados
+
+```
+
+### Modelo 2: Datos climatológicos 24h.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima1, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+
+# Resultados
+resultados1 <- param_grid
+resultados1$oob_error <- oob_error
+resultados1 <- resultados1 %>% arrange(oob_error)
+
+
+# Mejores hiperparámetros por out-of-bag error
+# ==============================================================================
+resultados1
+
+```
+
+### Modelo 3: Datos climatológicos 48h.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima2, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+
+# Resultados
+resultados2 <- param_grid
+resultados2$oob_error <- oob_error
+resultados2 <- resultados2 %>% arrange(oob_error)
+
+
+# Mejores hiperparámetros por out-of-bag error
+resultados2
+
+```
+
+### Modelo 4: Datos climatológicos 72h.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima3, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+
+# Resultados
+resultados3 <- param_grid
+resultados3$oob_error <- oob_error
+resultados3 <- resultados3 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados3
+
+```
+
+### Mejores hiperparámetros.
+
+Cogemos los mejores parámetros encontrados.
+
+```{r message= FALSE, warning=FALSE}
+
+sample = sample.split(df_clima3$ICA, SplitRatio = .75)
+train = subset(df_clima3, sample == TRUE)
+test  = subset(df_clima3, sample == FALSE)
+
+modelo.rf <- ranger(
+              formula   = ICA ~ .,
+              data      = train, 
+              num.trees = 200,
+              mtry      = 3,
+              max.depth = 0,
+              importance = "impurity",
+              seed      = 123)
+
+```
+
+Mostramos la importancia de las variables
+
+```{r message= FALSE, warning=FALSE}
+
+# Importancia de las variables
+importancia_pred <- modelo.rf$variable.importance %>%
+                    enframe(name = "predictor", value = "importancia")
+
+# Gráfico
+ggplot(
+  data = importancia_pred,
+  aes(x    = reorder(predictor, importancia),
+      y    = importancia,
+      fill = importancia)
+) +
+labs(x = "predictor", title = "Importancia predictores (pureza de nodos)") +
+geom_col() +
+coord_flip() +
+theme_bw() +
+theme(legend.position = "none", axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold'))
+
+```
+
+
+```{r message= FALSE, warning=FALSE}
+
+# Error de test del modelo final
+predicciones <- predict(modelo.rf, data = test)
+
+#predicciones <- predicciones$predictions %>% 
+#                bind_cols(test %>% dplyr::select(ICA))
+
+confusionMatrix(predicciones$predictions, test$ICA)
+
+```
+
+### SVM
+
+Para SVM es necesario primero de todo normalizar los datos.
+
+```{r message= FALSE, warning=FALSE}
+
+df_clima0_scaled <- df_clima0
+df_clima0_scaled[c(5:11)] <- lapply(df_clima0_scaled[c(5:11)], function(x) c(scale(x)))
+df_clima1_scaled <- df_clima0
+df_clima1_scaled[c(5:11)] <- lapply(df_clima1_scaled[c(5:11)], function(x) c(scale(x)))
+df_clima2_scaled <- df_clima0
+df_clima2_scaled[c(5:11)] <- lapply(df_clima2_scaled[c(5:11)], function(x) c(scale(x)))
+df_clima3_scaled <- df_clima0
+df_clima3_scaled[c(5:11)] <- lapply(df_clima3_scaled[c(5:11)], function(x) c(scale(x)))
+
+```
+
+
+```{r message= FALSE, warning=FALSE}
+
+sample = sample.split(df_clima2_scaled$ICA, SplitRatio = .2)
+train = subset(df_clima2_scaled, sample == TRUE)
+test  = subset(df_clima2_scaled, sample == FALSE)
+
+set.seed(123)
+svm_cv <- tune("svm", ICA ~ ., data = train, kernel = 'radial',
+               ranges = list(cost = c(0.01, 1, 5),
+                             gamma = c(0.5, 2, 5)))
+
+ggplot(data = svm_cv$performances, aes(x = cost, y = error, color = as.factor(gamma))) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Error de clasificación vs hiperparámetros C y gamma", color = "gamma") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+resultados4 <- svm_cv$performances %>% arrange(error)
+resultados4
+
+```
+
+
+
