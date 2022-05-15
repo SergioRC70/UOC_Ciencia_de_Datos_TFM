@@ -335,6 +335,32 @@ confusionMatrix(predicciones$predictions, test$ICA)
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+sample = sample.split(df_clima3$ICA, SplitRatio = .75)
+train = subset(df_clima3, sample == TRUE)
+test  = subset(df_clima3, sample == FALSE)
+
+modelo.rf.prob <- ranger(
+              formula   = ICA ~ .,
+              data      = train, 
+              num.trees = 200,
+              mtry      = 3,
+              max.depth = 0,
+              importance = "impurity",
+              seed      = 123,
+              probability = TRUE)
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+# Error de test del modelo final probabilidades
+predicciones.prob <- predict(modelo.rf.prob, data = test)
+head(predicciones.prob$predictions, 5)
+
+```
+
 ### SVM
 
 Para SVM es necesario primero de todo normalizar los datos.
@@ -352,6 +378,7 @@ df_clima3_scaled[c(5:11)] <- lapply(df_clima3_scaled[c(5:11)], function(x) c(sca
 
 ```
 
+Ejecutamos  para el dataset df_clima2_scaled con kernel radial.
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -376,5 +403,14 @@ resultados4
 
 ```
 
+```{r message= FALSE, warning=FALSE}
 
+sample = sample.split(df_clima2_scaled$ICA, SplitRatio = .2)
+train = subset(df_clima2_scaled, sample == TRUE)
+test  = subset(df_clima2_scaled, sample == FALSE)
 
+predicciones <- predict(object = svm_cv$best.model, newdata = test)
+
+paste("Error de test:", 100 * mean(test$ICA != predicciones), "%")
+
+```
