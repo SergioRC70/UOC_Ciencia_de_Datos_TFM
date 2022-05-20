@@ -1,0 +1,96 @@
+body, html {
+	margin: 0;
+	font-family: 'Lato', sans-serif;
+	font-size: 14px;
+}
+#map {
+	width: 100%;
+	height: 100%;
+	z-index: 1;
+}
+#overlay {
+	position: absolute; 
+	top: 60px;
+	right: 30px;
+	background-color: white; 
+	width: 300px; 
+	z-index: 100;
+	padding: 20px;
+	border-radius: 10px;
+	opacity: 0.9;
+}
+#meteo {
+	position: absolute; 
+	top: 220px;
+	right: 30px;
+	background-color: white; 
+	width: 300px; 
+	z-index: 100;
+	padding: 20px;
+	border-radius: 10px;
+	opacity: 0.9;
+	display: none;
+}
+.circlePopup {
+	font-family: 'Lato', sans-serif;
+	font-size: 14px;
+}
+.titulo_estacion {
+	font-weight: bold;
+	display: inline-block;
+	font-size: 16px;
+	padding-bottom: 10px;
+	text-decoration: underline;
+}
+.info_icon {
+	position: absolute; 
+	top: 15px;
+	right: 40px;
+	width: 30px;
+	height: 30px;
+	z-index: 100;	
+}
+.info_icon:hover {
+    cursor: pointer;
+}
+#limites_contaminantes {
+	font-family: 'Lato', sans-serif;
+	font-size: 14px;
+	border: 1px solid black;
+}
+#limites_contaminantes>thead {
+	font-weight: bold;
+}
+#limites_contaminantes>thead>tr>td {
+	border-bottom: 3px solid black;
+}
+#limites_contaminantes>tbody>tr>td {
+	border-bottom: 1px solid black;
+}
+#limites_contaminantes>tbody>tr>:nth-child(2) { 
+	background-color: #50f0e6;
+}
+#limites_contaminantes>tbody>tr>:nth-child(3) { 
+	background-color: #50ccaa;
+	color: white;
+}
+#limites_contaminantes>tbody>tr>:nth-child(4) { 
+	background-color: #f0e641;
+}
+#limites_contaminantes>tbody>tr>:nth-child(5) { 
+	background-color: #ff5050;
+	color: white;
+}
+#limites_contaminantes>tbody>tr>:nth-child(6) { 
+	background-color: #960032;
+	color: white;
+}
+#limites_contaminantes>tbody>tr>:nth-child(7) { 
+	background-color: #7d2181;
+	color: white;
+}
+#error_fecha {
+	color: red;
+	display: none;
+	font-weight: bold;
+}

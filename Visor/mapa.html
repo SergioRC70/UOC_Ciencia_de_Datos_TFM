@@ -1,0 +1,179 @@
+<html>
+	<head>
+		<meta charset="UTF-8">
+
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<link rel="stylesheet" href="mapstyle.css">
+ 		
+ 		<link rel="stylesheet" href="leaflet/leaflet.css" />
+		<script src="leaflet/leaflet.js" ></script>
+
+		<script src="renderStations.js" ></script>
+		<script src="d3/dist/d3.min.js"></script>
+
+		<link rel="stylesheet" href="jquery-ui/jquery-ui.css">
+		<script src="jquery/jquery-3.6.0.min.js"></script>
+		<script src="jquery-ui/jquery-ui.js"></script>
+
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400,700&display=swap" rel="stylesheet">
+
+		<script>
+			// Añadimos el datepicker a la capa de selección de día
+			$( function() {
+				$("#datepicker").datepicker.setDefaults( $.datepicker.regional[ "es" ] );
+			} );
+
+			// Ventana modal para mostrar info de la viz
+			$(function () {
+				$("#dialog").dialog({
+					modal: true,
+					autoOpen: false,
+					title: "Datos históricos de calidad del aire en Madrid",
+					width: 750,
+					height: 550
+				});
+				$("#info_icon").click(function () {
+					$('#dialog').dialog('open');
+				});
+			});
+		</script>
+	</head>
+	<body>
+		<img id="info_icon" class="info_icon" src="img/info_icon.png" alt="Información de la visualización" />
+
+		<div id="dialog" style="display: none">
+			Esta visualización muestra los datos de calidad del aire recogidos en las estaciones de control de la ciudad de Madrid desde el año 2001 hasta el 31 de diciembre de 2021.<br/><br/>
+			Los datos que se muestran has sido obtenidos del portal de datos abiertos del Ayuntamiento de Madrid. En concreto, la visualización muestra información de los siguiente juegos de datos:<br/>
+			<ol>
+				<li>
+					<a href="https://datos.madrid.es/portal/site/egob/menuitem.c05c1f754a33a9fbe4b2e4b284f1a5a0/?vgnextoid=aecb88a7e2b73410VgnVCM2000000c205a0aRCRD&vgnextchannel=374512b9ace9f310VgnVCM100000171f5a0aRCRD&vgnextfmt=default">Calidad del aire. Datos diarios</a>. Este conjunto de datos nos da la información de los valores de calidad del aire obtenidos por las 24 estaciones remotas automáticas que recogen la información básica para la vigilancia atmosférica. Los valores diarios se obtienen como una media aritmética de los 24 valores horarios de cada día.<br/><br/>
+				</li>
+				<li>
+					<a href="https://datos.madrid.es/portal/site/egob/menuitem.c05c1f754a33a9fbe4b2e4b284f1a5a0/?vgnextoid=8d7357cec5efa610VgnVCM1000001d4a900aRCRD&vgnextchannel=374512b9ace9f310VgnVCM100000171f5a0aRCRD&vgnextfmt=default">Datos meteorológicos. Datos diarios</a>. Este conjunto de datos nos da la información de las estaciones de control pertenecientes a la red meteorológica municipal. 
+				</li>
+			</ol>
+			El hecho de mostrar también información meteorológia recogida durante esos días nos permite estudiar la relación que tiene la calidad del aire con algunos aspectos atmosféricos como la lluvia, la temperatura o la velocidad del viento.<br/><br/>
+			El índice de calidad del aire (ICA) creado por la Agencia Europea de Medio Ambiente (AEMA) se basa en cinco contaminantes clave que son perjudiciales para la salud de las personas y el medio ambiente: partículas en suspensión (PM2,5 y PM10), ozono troposférico (O3), dióxido de nitrógeno (NO2) y dióxido de azufre (SO2). Los detalles sobre el ICA se pueden encontrar en la <a href="https://www.eea.europa.eu/es/highlights/indice-europeo-de-calidad-del">página web de la AEMA</a>.<br/><br/>
+			Los límites para determinar el índice de calidad del aire se muestran en la siguiente tabla:<br/><br/>
+			<table id="limites_contaminantes" cellpadding="10" cellspacing="0">
+				<thead>
+					<tr>
+						<td></td>
+						<td>Bueno</td>
+						<td>Razonable</td>
+						<td>Moderado</td>
+						<td>Malo</td>
+						<td>Muy malo</td>
+						<td>Extremadamente malo</td>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Part&iacute;culas &lt; 2.5 &#956;m (PM2.5)</td>
+						<td>0-10</td>
+						<td>10-20</td>
+						<td>20-25</td>
+						<td>25-50</td>
+						<td>50-75</td>
+						<td>75-800</td>
+					</tr>
+					<tr>
+						<td>Part&iacute;culas &lt; 10 &#956;m (PM10)</td>
+						<td>0-20</td>
+						<td>20-40</td>
+						<td>40-50</td>
+						<td>50-100</td>
+						<td>100-150</td>
+						<td>150-1200</td>
+					</tr>
+					<tr>
+						<td>Di&oacute;xido de Nitr&oacute;geno (NO<sub>2</sub>)</td>
+						<td>0-40</td>
+						<td>40-90</td>
+						<td>90-120</td>
+						<td>120-230</td>
+						<td>230-340</td>
+						<td>340-1000</td>
+					</tr>
+					<tr>
+						<td>Ozono (O<sub>3</sub>)</td>
+						<td>0-50</td>
+						<td>50-100</td>
+						<td>100-130</td>
+						<td>130-240</td>
+						<td>240-380</td>
+						<td>380-800</td>
+					</tr>
+					<tr>
+						<td>Di&oacute;xido de Azufre (SO<sub>2</sub>)</td>
+						<td>0-100</td>
+						<td>100-200</td>
+						<td>200-350</td>
+						<td>350-500</td>
+						<td>500-750</td>
+						<td>750-1250</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+
+		<div id="map"></div>
+
+		<div id="overlay">
+			<b>Seleccionar fecha de visualización de los datos.</b><br/><br/>
+			Datos disponibles desde 01 de enero de 2001 hasta el 30 de noviembre de 2021<br/><br/>
+			<b>Fecha:</b>&nbsp;&nbsp;&nbsp;<input type="text" id="datepicker" class="date">
+			<span id="error_fecha"><br/><br/>Datos anteriores a 2001 o posteriores al 30 de noviembre de 2021 no disponibles</span>
+		</div>
+
+		<div id="meteo">
+		</div>
+
+		<script>
+			// Creamos una variable donde vamos a almacenar los markers que añadios al mapa.
+			// Los necesitaremos para borrarlos cuando cambie la selección.
+			var circles = [];
+
+			// Cremos el mapa de leaflet con las coordenadas de Madrid.
+			var map = L.map('map').setView([40.4265, -3.67256], 13)
+
+			// Creamos la capa y la añadimos nuestro mapa.
+			var tiles = L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+				maxZoom: 18,
+				attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+					'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+				id: 'mapbox/streets-v11',
+				tileSize: 512,
+				zoomOffset: -1,
+			}).addTo(map);
+
+			var imageUrl = 'file.png',
+			imageBounds = [[-3.891673, 40.30836], [-3.515725, 40.64586]];
+
+			L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+			// Creamos el evento para el datepicker. Cuando cambie la selección llamamos a la función
+			// renderStations (en el fichero renderStations.js) para dibujar todos los datos
+			// correspondientes a ese día.
+			$(".date").datepicker({
+				onSelect: function(dateText, inst) {
+					var selectedDate = new Date(inst.selectedYear, inst.selectedMonth, inst.selectedDay);
+					$(this).change();
+					if ((selectedDate > new Date(2021, 10, 30)) || (selectedDate < new Date(2001, 0, 1))) {
+						$("#error_fecha").show();
+						$("#meteo").slideUp(1000);
+						$("#meteo").empty();
+					}
+					else {
+						$("#error_fecha").hide();						
+						renderStations(selectedDate);
+					}
+				}
+			})
+		</script>
+
+	</body>
+</html>
