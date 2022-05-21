@@ -22,6 +22,10 @@ El fichero MADRID.qgz contiene el proyecto QGIS con el análisis geográficos de
 - Capas de interpolación de los últimos 4 años para los 5 contaminantes estudiados
 - Capas de interpolación para los periodos previos al confinamiento de 2020 y durante el confinamiento de 2020 para los 5 contaminantes estudiados
 
+## Visor
+
+La carapeta Visor contiene el código de la visualización realizada con Leaflet que muestra las distintas capas de interpolación creadas en QGIS así como los datos de calidad del aire para una fecha que se selecciones. Esta visualización está disonible en la siguiente URL: https://sergiorc70.github.io/UOC_Ciencia_de_Datos_TFM/Visor/mapa.html
+
 ## Carpetas
 
 A continuación, se detalla el contenido de las carpetas del repositorio:
