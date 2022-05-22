@@ -21,6 +21,7 @@
 		<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400,700&display=swap" rel="stylesheet">
 
 		<script type="text/javascript" src="layers/distritos.js"></script>
+		<script type="text/javascript" src="layers/ZBEDEP_Distrito_Centro.js"></script>
 
 		<script>
 			// Añadimos el datepicker a la capa de selección de día
@@ -127,6 +128,13 @@
 			<span id="error_fecha"><br/><br/>Datos anteriores a 2001 o posteriores al 31 de diciembre de 2021 no disponibles</span>
 		</div>
 
+		<div id="legend">
+			<div id="legend_gradient"></div>
+			<div id="legend_text">
+				&nbsp;2&#956;g/m<sup>3</sup><br/><br/><br/><br/><br/>&nbsp;12&#956;g/m<sup>3</sup>
+			</div>
+		</div>
+
 		<script>
 			// Creamos una variable donde vamos a almacenar los markers que añadios al mapa.
 			// Los necesitaremos para borrarlos cuando cambie la selección.
@@ -189,32 +197,42 @@
 			};
 			var dist_layer = L.geoJson(distritos, {style: distritosStyle}).addTo(map);
 
+			// Capa Madrid Central
+			var zbedepStyle = {
+				"color": "#000",
+				"weight": 1,
+				"fillColor": "#ff7800",
+				"fillOpacity": 0.5
+			};
+			var zbedep_layer = L.geoJson(ZBEDEP_Distrito_Centro, {style: zbedepStyle}).addTo(map);
+
 			var baseMaps = {
-				"Streets": streets
+				"Streets": streets,
+				"Interpolación SO2 2021": SO2_2021,
+				"Interpolación SO2 2020": SO2_2020,
+				"Interpolación SO2 2019": SO2_2019,
+				"Interpolación SO2 2018": SO2_2018,
+				"Interpolación NO2 2021": NO2_2021,
+				"Interpolación NO2 2020": NO2_2020,
+				"Interpolación NO2 2019": NO2_2019,
+				"Interpolación NO2 2018": NO2_2018,
+				"Interpolación PM25 2021": PM25_2021,
+				"Interpolación PM25 2020": PM25_2020,
+				"Interpolación PM25 2019": PM25_2019,
+				"Interpolación PM25 2018": PM25_2018,
+				"Interpolación PM10 2021": PM10_2021,
+				"Interpolación PM10 2020": PM10_2020,
+				"Interpolación PM10 2019": PM10_2019,
+				"Interpolación PM10 2018": PM10_2018,
+				"Interpolación O3 2021": O3_2021,
+				"Interpolación O3 2020": O3_2020,
+				"Interpolación O3 2019": O3_2019,
+				"Interpolación O3 2018": O3_2018
 			};
 
 			var overlayMaps = {
-				"SO2 2021": SO2_2021,
-				"SO2 2020": SO2_2020,
-				"SO2 2019": SO2_2019,
-				"SO2 2018": SO2_2018,
-				"NO2 2021": NO2_2021,
-				"NO2 2020": NO2_2020,
-				"NO2 2019": NO2_2019,
-				"NO2 2018": NO2_2018,
-				"PM25 2021": PM25_2021,
-				"PM25 2020": PM25_2020,
-				"PM25 2019": PM25_2019,
-				"PM25 2018": PM25_2018,
-				"PM10 2021": PM10_2021,
-				"PM10 2020": PM10_2020,
-				"PM10 2019": PM10_2019,
-				"PM10 2018": PM10_2018,
-				"O3 2021": O3_2021,
-				"O3 2020": O3_2020,
-				"O3 2019": O3_2019,
-				"O3 2018": O3_2018,
-				"Distritos": dist_layer
+				"Distritos": dist_layer,
+				"ZBEDEP Distrito Centro": zbedep_layer
 			}
 
 			// Layer Control
@@ -227,7 +245,7 @@
 				onSelect: function(dateText, inst) {
 					var selectedDate = new Date(inst.selectedYear, inst.selectedMonth, inst.selectedDay);
 					$(this).change();
-					if ((selectedDate > new Date(2021, 10, 30)) || (selectedDate < new Date(2001, 0, 1))) {
+					if ((selectedDate > new Date(2021, 12, 31)) || (selectedDate < new Date(2001, 0, 1))) {
 						$("#error_fecha").show();
 					}
 					else {
@@ -236,6 +254,20 @@
 					}
 				}
 			})
+
+			// Añadir leyenda de la capa overlay seleccionada
+			map.on('baselayerchange', function (eventLayer) {
+				if (eventLayer.name.includes('SO2')) {
+					$("#legend").show();
+				} 
+				else {
+					$("#legend").hide();
+				}
+			});
+
+			// Qutar leyenda
+			//map.on('overlayadd', function (eventLayer) {
+
 		</script>
 
 	</body>

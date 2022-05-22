@@ -82,3 +82,30 @@ body, html {
 	display: none;
 	font-weight: bold;
 }
+#legend {
+	position: absolute; 
+	right: 40px;
+	bottom: 20px;
+	width: 80px;
+	height: 120px;
+	z-index: 100;
+	display: flex;
+	background-color: white; 
+	border-radius: 10px;
+	padding: 10px;
+	opacity: 0.9;
+	display: none;
+}
+
+#legend_gradient {
+	width: 15px;
+	height: 120px;
+	background-image: linear-gradient(#2b83ba, #abdda4, #ffffbf, #fdae61, #d7191c);
+	float: left;
+	flex: 1;
+}
+
+#legend_text {
+	width: 65px;
+	padding-left: 10px;
+}
