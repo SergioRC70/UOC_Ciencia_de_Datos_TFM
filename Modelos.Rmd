@@ -61,7 +61,14 @@ Vamos a añadir variables al conjunto de datos meteorológicos. En concreto, vam
 meteo_all <- meteo_all %>%
     dplyr::arrange(desc(ESTACION)) %>% 
     dplyr::group_by(ESTACION) %>% 
-    dplyr::mutate(vel_viento_24h = rollmean(VEL_VIENTO, k = 24, fill = NA, align = "right"),
+    dplyr::mutate(vel_viento_6h = rollmean(VEL_VIENTO, k = 6, fill = NA, align = "right"),
+                  dir_viento_6h = rollmean(DIR_VIENTO, k = 6, fill = NA, align = "right"),
+                  temperatura_6h = rollmean(TEMPERATURA, k = 6, fill = NA, align = "right"),
+                  humedad_6h = rollmean(HUMEDAD, k = 6, fill = NA, align = "right"),
+                  presion_6h = rollmean(PRESION, k = 6, fill = NA, align = "right"),
+                  radiacion_6h = rollmean(RADIACION_SOLAR, k = 6, fill = NA, align = "right"),
+                  precipitacion_6h = rollmean(PRECIPITACION, k = 6, fill = NA, align = "right"),
+                  vel_viento_24h = rollmean(VEL_VIENTO, k = 24, fill = NA, align = "right"),
                   dir_viento_24h = rollmean(DIR_VIENTO, k = 24, fill = NA, align = "right"),
                   temperatura_24h = rollmean(TEMPERATURA, k = 24, fill = NA, align = "right"),
                   humedad_24h = rollmean(HUMEDAD, k = 24, fill = NA, align = "right"),
@@ -74,18 +81,11 @@ meteo_all <- meteo_all %>%
                   humedad_48h = rollmean(HUMEDAD, k = 48, fill = NA, align = "right"),
                   presion_48h = rollmean(PRESION, k = 48, fill = NA, align = "right"),
                   radiacion_48h = rollmean(RADIACION_SOLAR, k = 48, fill = NA, align = "right"),
-                  precipitacion_48h = rollmean(PRECIPITACION, k = 48, fill = NA, align = "right"),
-                  vel_viento_72h = rollmean(VEL_VIENTO, k = 72, fill = NA, align = "right"),
-                  dir_viento_72h = rollmean(DIR_VIENTO, k = 72, fill = NA, align = "right"),
-                  temperatura_72h = rollmean(TEMPERATURA, k = 72, fill = NA, align = "right"),
-                  humedad_72h = rollmean(HUMEDAD, k = 72, fill = NA, align = "right"),
-                  presion_72h = rollmean(PRESION, k = 72, fill = NA, align = "right"),
-                  radiacion_72h = rollmean(RADIACION_SOLAR, k = 72, fill = NA, align = "right"),
-                  precipitacion_72h = rollmean(PRECIPITACION, k = 72, fill = NA, align = "right"),
+                  precipitacion_48h = rollmean(PRECIPITACION, k = 48, fill = NA, align = "right")
                  ) %>% 
   dplyr::ungroup()
 
-# Quitamos algunas observacioens (las primeras 72 horas) que no tienen valor para alguna de las nuevas variables que hemos creado.
+# Quitamos algunas observacioens (las primeras 48 horas) que no tienen valor para alguna de las nuevas variables que hemos creado.
 meteo_all <- na.omit(meteo_all)
 
 ```
@@ -132,7 +132,7 @@ summary(df_clima)
 
 Vamos a intentar predecir el valor del ICA. La mayoría de las observaciones tienen valor 1 o 2.
 
-Vamos a crear 4 datasets diferentes con los datos meteorológicos del momento, la media de las últimas 24 horas, la media de las últimas 48 horas y las últimas 72 horas.
+Vamos a crear 4 datasets diferentes con los datos meteorológicos del momento, la media de las últimas 6 horas, la media de las últimas 24 horas y las últimas 48 horas.
 
 ```{r message= FALSE, warning=FALSE}
 
@@ -299,6 +299,19 @@ modelo.rf <- ranger(
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+#library(Metrics)
+predicciones <- predict(
+                  modelo.rf,
+                  data = test
+                )
+
+predicciones <- predicciones$predictions
+rmse(test$ICA, predicciones)
+
+```
+
 Mostramos la importancia de las variables
 
 ```{r message= FALSE, warning=FALSE}
@@ -321,6 +334,276 @@ theme_bw() +
 theme(legend.position = "none", axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold'))
 
 ```
+
+### Foreacast 6 horas
+
+```{r message= FALSE, warning=FALSE}
+
+ICA_shifted <- tail(df_clima0$ICA, -6)
+
+df_clima0_shifted <- df_clima0
+df_clima0_shifted$ICA <- c(ICA_shifted, NA, NA, NA, NA, NA, NA)
+df_clima0_shifted <- na.omit(df_clima0_shifted)
+
+df_clima1_shifted <- df_clima1
+df_clima1_shifted$ICA <- c(ICA_shifted, NA, NA, NA, NA, NA, NA)
+df_clima1_shifted <- na.omit(df_clima1_shifted)
+
+df_clima2_shifted <- df_clima2
+df_clima2_shifted$ICA <- c(ICA_shifted, NA, NA, NA, NA, NA, NA)
+df_clima2_shifted <- na.omit(df_clima2_shifted)
+
+df_clima3_shifted <- df_clima3
+df_clima3_shifted$ICA <- c(ICA_shifted, NA, NA, NA, NA, NA, NA)
+df_clima3_shifted <- na.omit(df_clima3_shifted)
+
+```
+
+### Modelo 1: Datos climatológicos del mismo día.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima0_shifted, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted <- param_grid
+resultados_shifted$oob_error <- oob_error
+resultados_shifted <- resultados_shifted %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted
+
+```
+
+### Modelo 2: Datos climatológicos 6 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima1_shifted, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted1 <- param_grid
+resultados_shifted1$oob_error <- oob_error
+resultados_shifted1 <- resultados_shifted1 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted1
+
+```
+
+### Modelo 3: Datos climatológicos 24 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima2_shifted, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted2 <- param_grid
+resultados_shifted2$oob_error <- oob_error
+resultados_shifted2 <- resultados_shifted2 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted2
+
+```
+
+### Modelo 4: Datos climatológicos 48 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima3_shifted, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted3 <- param_grid
+resultados_shifted3$oob_error <- oob_error
+resultados_shifted3 <- resultados_shifted3 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted3
+
+```
+
+### Foreacast 24 horas
+
+```{r message= FALSE, warning=FALSE}
+
+ICA_shifted2 <- tail(df_clima0$ICA, -24)
+
+df_clima0_shifted2 <- df_clima0
+df_clima0_shifted2$ICA <- c(ICA_shifted2, rep(NA, 24))
+df_clima0_shifted2 <- na.omit(df_clima0_shifted2)
+
+df_clima1_shifted2 <- df_clima1
+df_clima1_shifted2$ICA <- c(ICA_shifted2, rep(NA, 24))
+df_clima1_shifted2 <- na.omit(df_clima1_shifted2)
+
+df_clima2_shifted2 <- df_clima2
+df_clima2_shifted2$ICA <- c(ICA_shifted2, rep(NA, 24))
+df_clima2_shifted2 <- na.omit(df_clima2_shifted2)
+
+df_clima3_shifted2 <- df_clima3
+df_clima3_shifted2$ICA <- c(ICA_shifted2, rep(NA, 24))
+df_clima3_shifted2 <- na.omit(df_clima3_shifted2)
+
+```
+
+### Modelo 1: Datos climatológicos del mismo día.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima0_shifted2, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted02 <- param_grid
+resultados_shifted02$oob_error <- oob_error
+resultados_shifted02 <- resultados_shifted02 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted02
+
+```
+
+### Modelo 2: Datos climatológicos 6 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima1_shifted2, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted12 <- param_grid
+resultados_shifted12$oob_error <- oob_error
+resultados_shifted12 <- resultados_shifted12 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted12
+
+```
+
+### Modelo 3: Datos climatológicos 24 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima2_shifted2, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted22 <- param_grid
+resultados_shifted22$oob_error <- oob_error
+resultados_shifted22 <- resultados_shifted22 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted22
+
+```
+
+### Modelo 4: Datos climatológicos 48 horas.
+
+```{r message= FALSE, warning=FALSE}
+
+for(i in 1:nrow(param_grid)){
+  modelo <- ranger(
+              formula   = as.factor(ICA) ~ .,
+              data      = df_clima3_shifted2, 
+              num.trees = param_grid$num_trees[i],
+              mtry      = param_grid$mtry[i],
+              max.depth = param_grid$max_depth[i],
+              seed      = 123
+            )
+
+  oob_error[i] <- modelo$prediction.error
+}
+
+# Resultados
+resultados_shifted32 <- param_grid
+resultados_shifted32$oob_error <- oob_error
+resultados_shifted32 <- resultados_shifted32 %>% arrange(oob_error)
+
+# Mejores hiperparámetros por out-of-bag error
+resultados_shifted32
+
+```
+
+
+
+
+
+
 
 
 ```{r message= FALSE, warning=FALSE}
@@ -382,7 +665,7 @@ Ejecutamos  para el dataset df_clima2_scaled con kernel radial.
 
 ```{r message= FALSE, warning=FALSE}
 
-sample = sample.split(df_clima2_scaled$ICA, SplitRatio = .2)
+sample = sample.split(df_clima2_scaled$ICA, SplitRatio = .05)
 train = subset(df_clima2_scaled, sample == TRUE)
 test  = subset(df_clima2_scaled, sample == FALSE)
 

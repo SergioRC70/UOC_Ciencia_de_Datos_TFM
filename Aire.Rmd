@@ -31,6 +31,7 @@ library(ggplot2)
 library(plyr)
 library(cowplot)
 library(ggpubr)
+library(tseries)
 
 ```
 
@@ -285,6 +286,7 @@ df_anual <- ddply(datos_horarios_aire, c("ANO"), summarize, SO2.mean = mean(SO2,
 
 p1 <- ggplot(df_anual, aes(x = ANO, y = SO2.mean)) +
   geom_line(size = 0.5, color = colores["SO2"]) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.5) +
   ggtitle("Evolución anual") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
@@ -340,12 +342,34 @@ plot_so2
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+# Test de Dickey-Fuller ara los datos de los últimos 10 años
+adf.test(df_diario[!is.na(df_diario$SO2.mean) & df_diario$FECHA >= "2008/01/01", ]$SO2.mean)
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+#df_diario <- ddply(datos_horarios_aire, c("FECHA"), summarize, SO2.mean = mean(SO2, na.rm = T), NO2.mean = mean(NO2, na.rm = T), PM10.mean = mean(PM10, na.rm = T), PM25.mean = mean(PM25, na.rm = T), O3.mean = mean(O3, na.rm = T))
+
+# Decomposición de la serie temporal
+firstHour <- 24*(as.Date("2001-1-1 1:00:00")-as.Date("2001-1-1 00:00:00"))
+lastHour <- as.Date("2022-1-1 00:00:00")
+tt <- ts(df_diario[!is.na(df_diario$SO2), ]$SO2,start=c(2001,firstHour), frequency=24*365)
+SO2Decompose  <- decompose(tt)
+plot(SO2Decompose)
+
+```
+
+
 ### Análisis NO2
 
 ```{r message= FALSE, warning=FALSE}
 
 p1 <- ggplot(df_anual, aes(x = ANO, y = NO2.mean)) +
   geom_line(size = 0.5, color = colores["NO2"]) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.5) +
   ggtitle("Evolución anual") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
@@ -401,12 +425,20 @@ plot_no2
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+# Test de Dickey-Fuller ara los datos de los últimos 10 años
+adf.test(df_diario[!is.na(df_diario$NO2.mean) & df_diario$FECHA >= "2008/01/01", ]$NO2.mean)
+
+```
+
 ### Análisis PM25
 
 ```{r message= FALSE, warning=FALSE}
 
 p1 <- ggplot(df_anual, aes(x = ANO, y = PM25.mean)) +
   geom_line(size = 0.5, color = colores["PM25"]) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.5) +
   ggtitle("Evolución anual") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
@@ -462,12 +494,20 @@ plot_pm25
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+# Test de Dickey-Fuller ara los datos de los últimos 10 años
+adf.test(df_diario[!is.na(df_diario$PM25.mean) & df_diario$FECHA >= "2008/01/01", ]$PM25.mean)
+
+```
+
 ### Análisis PM10
 
 ```{r message= FALSE, warning=FALSE}
 
 p1 <- ggplot(df_anual, aes(x = ANO, y = PM10.mean)) +
   geom_line(size = 0.5, color = colores["PM10"]) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.5) +
   ggtitle("Evolución anual") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
@@ -523,12 +563,20 @@ plot_pm10
 
 ```
 
+```{r message= FALSE, warning=FALSE}
+
+# Test de Dickey-Fuller ara los datos de los últimos 10 años
+adf.test(df_diario[!is.na(df_diario$PM10.mean) & df_diario$FECHA >= "2008/01/01", ]$PM10.mean)
+
+```
+
 ### Análisis O3
 
 ```{r message= FALSE, warning=FALSE}
 
 p1 <- ggplot(df_anual, aes(x = ANO, y = O3.mean)) +
   geom_line(size = 0.5, color = colores["O3"]) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.5) +
   ggtitle("Evolución anual") +
   theme_bw() + 
   theme(axis.text = element_text(size = 8), axis.title =  element_text(size = 9), plot.title = element_text(face = 'bold')) + 
@@ -581,6 +629,13 @@ plot_o3 <- ggarrange(p1,
 save_plot("01_O3.png", plot_o3, base_width = 8, base_height = 8)
 
 plot_o3
+
+```
+
+```{r message= FALSE, warning=FALSE}
+
+# Test de Dickey-Fuller ara los datos de los últimos 10 años
+adf.test(df_diario[!is.na(df_diario$O3.mean) & df_diario$FECHA >= "2008/01/01", ]$O3.mean)
 
 ```
 
