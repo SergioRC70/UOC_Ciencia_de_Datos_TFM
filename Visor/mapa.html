@@ -117,9 +117,9 @@
 
 		<div id="overlay">
 			<b>Seleccionar fecha de visualización de los datos.</b><br/><br/>
-			Datos disponibles desde 01 de enero de 2001 hasta el 30 de marzo de 2022<br/><br/>
+			Datos disponibles desde 01 de enero de 2001 hasta el 30 de abril de 2022<br/><br/>
 			<b>Fecha:</b>&nbsp;&nbsp;&nbsp;<input type="text" id="datepicker" class="date">
-			<span id="error_fecha"><br/><br/>Datos anteriores a 2001 o posteriores al 30 de marzo de 2022 no disponibles</span>
+			<span id="error_fecha"><br/><br/>Datos anteriores a 2001 o posteriores al 30 de abril de 2022 no disponibles</span>
 		</div>
 
 		<div id="legend">
@@ -239,7 +239,7 @@
 				onSelect: function(dateText, inst) {
 					var selectedDate = new Date(inst.selectedYear, inst.selectedMonth, inst.selectedDay);
 					$(this).change();
-					if ((selectedDate > new Date(2021, 12, 31)) || (selectedDate < new Date(2001, 0, 1))) {
+					if ((selectedDate > new Date(2021, 04, 30)) || (selectedDate < new Date(2001, 0, 1))) {
 						$("#error_fecha").show();
 					}
 					else {
