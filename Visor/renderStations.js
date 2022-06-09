@@ -41,16 +41,14 @@ function renderStations(fecha)
 					// Dióxido de Azufre SO2
 					if (magnitud == 1) {
 						valor_so2 = parseInt(valor, 10) + '&nbsp;&#956;g/m<sup>3</sup>';
-						if (valor <= 100)
+						if (valor <= 50)
 							indice_calidad = Math.max(indice_calidad, 0);
-						else if (valor <= 200)
+						else if (valor <= 100)
 							indice_calidad = Math.max(indice_calidad, 1);
 						else if (valor <= 350)
 							indice_calidad = Math.max(indice_calidad, 2);
 						else if (valor <= 500)
 							indice_calidad = Math.max(indice_calidad, 3);
-						else if (valor <= 750)
-							indice_calidad = Math.max(indice_calidad, 4);
 						else
 							indice_calidad = 5;
 					}
@@ -58,16 +56,14 @@ function renderStations(fecha)
 					// Dióxido de Nitrógeno NO2
 					if (magnitud == 8) {
 						valor_no2 = parseInt(valor, 10) + '&nbsp;&#956;g/m<sup>3</sup>';
-						if (valor <= 40)
+						if (valor <= 50)
 							indice_calidad = Math.max(indice_calidad, 0);
-						else if (valor <= 90)
+						else if (valor <= 100)
 							indice_calidad = Math.max(indice_calidad, 1);
-						else if (valor <= 120)
+						else if (valor <= 200)
 							indice_calidad = Math.max(indice_calidad, 2);
-						else if (valor <= 230)
+						else if (valor <= 40)
 							indice_calidad = Math.max(indice_calidad, 3);
-						else if (valor <= 340)
-							indice_calidad = Math.max(indice_calidad, 4);
 						else
 							indice_calidad = 5;
 					}
@@ -75,16 +71,14 @@ function renderStations(fecha)
 					// Partículas < 2.5 µm PM2.5
 					if (magnitud == 9) {
 						valor_pm25 = parseInt(valor, 10) + '&nbsp;&#956;g/m<sup>3</sup>';
-						if (valor <= 10)
+						if (valor <= 15)
 							indice_calidad = Math.max(indice_calidad, 0);
-						else if (valor <= 20)
+						else if (valor <= 30)
 							indice_calidad = Math.max(indice_calidad, 1);
-						else if (valor <= 25)
+						else if (valor <= 55)
 							indice_calidad = Math.max(indice_calidad, 2);
-						else if (valor <= 50)
+						else if (valor <= 110)
 							indice_calidad = Math.max(indice_calidad, 3);
-						else if (valor <= 75)
-							indice_calidad = Math.max(indice_calidad, 4);
 						else
 							indice_calidad = 5;
 					}
@@ -92,16 +86,14 @@ function renderStations(fecha)
 					// Partículas < 10 µm PM10
 					if (magnitud == 10) {
 						valor_pm10 = parseInt(valor, 10) + '&nbsp;&#956;g/m<sup>3</sup>';
-						if (valor <= 20)
+						if (valor <= 25)
 							indice_calidad = Math.max(indice_calidad, 0);
-						else if (valor <= 40)
-							indice_calidad = Math.max(indice_calidad, 1);
 						else if (valor <= 50)
+							indice_calidad = Math.max(indice_calidad, 1);
+						else if (valor <= 90)
 							indice_calidad = Math.max(indice_calidad, 2);
-						else if (valor <= 100)
+						else if (valor <= 180)
 							indice_calidad = Math.max(indice_calidad, 3);
-						else if (valor <= 150)
-							indice_calidad = Math.max(indice_calidad, 4);
 						else
 							indice_calidad = 5;
 					}
@@ -109,16 +101,14 @@ function renderStations(fecha)
 					// Ozono O3
 					if (magnitud == 14) {
 						valor_o3 = parseInt(valor, 10) + '&nbsp;&#956;g/m<sup>3</sup>';
-						if (valor <= 50)
+						if (valor <= 60)
 							indice_calidad = Math.max(indice_calidad, 0);
-						else if (valor <= 100)
+						else if (valor <= 120)
 							indice_calidad = Math.max(indice_calidad, 1);
-						else if (valor <= 130)
+						else if (valor <= 180)
 							indice_calidad = Math.max(indice_calidad, 2);
 						else if (valor <= 240)
 							indice_calidad = Math.max(indice_calidad, 3);
-						else if (valor <= 380)
-							indice_calidad = Math.max(indice_calidad, 4);
 						else
 							indice_calidad = 5;
 					}
@@ -131,15 +121,15 @@ function renderStations(fecha)
 				switch (indice_calidad) {
 					case 0:
 						colorCircle = "#50f0e6";
-						aqi_text = "Bueno";
+						aqi_text = "Muy Bueno";
 						break;
 					case 1:
 						colorCircle = "#50ccaa";
-						aqi_text = "Razonable";
+						aqi_text = "Bueno";
 						break;
 					case 2:
 						colorCircle = "#f0e641";
-						aqi_text = "Moderado";
+						aqi_text = "Regular";
 						break;
 					case 3:
 						colorCircle = "#ff5050";
@@ -151,7 +141,7 @@ function renderStations(fecha)
 						break;
 					case 5:
 						colorCircle = "#7d2181";
-						aqi_text = "Extremadamente malo";
+						aqi_text = "Muy malo";
 						break;
 				} 
 				var circle = L.circle([latitud, longitud], {radius: 200, color: colorCircle, opacity: 1, fillOpacity: 0.6}).addTo(map);
